@@ -6,6 +6,7 @@ import {
 } from './TireCards'
 import { Card, Header, Kpi, Open, STATUS, useTheme } from './ui'
 import RemainingLifeCard from './rul/RemainingLifeCard'
+import TireImageCard from './TireImageCard'
 
 export default function Tyres() {
   const [id, setId] = useState('L1')
@@ -44,9 +45,11 @@ export default function Tyres() {
           </div>
         </div>
 
-        {/* right: remaining life (live RUL) + TPMS + touchdown */}
+        {/* right: remaining life (live RUL) + photo AI screen + TPMS + touchdown */}
         <div className="flex flex-col gap-3 lg:col-span-3">
           <RemainingLifeCard tire={tire} />
+
+          <TireImageCard tire={tire} />
 
           <PressureCard tire={tire} />
 

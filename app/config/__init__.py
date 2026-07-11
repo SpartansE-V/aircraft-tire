@@ -34,6 +34,29 @@ class RoboflowSettings(BaseModel):
     )
 
 
+class UploadsSettings(BaseModel):
+    """Image-upload + vision-assessment configuration.
+
+    Uploads are proxied server-side to the AWS API Gateway (S3-backed) because that endpoint sends
+    no CORS headers — a browser can PUT bytes but cannot read the `{imageId, key, presignedUrl}`
+    response. Routing through the backend keeps the browser same-origin and lets the same request
+    run the VLM assessment.
+    """
+
+    direct_url: str = (
+        "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api/v1/uploads/images"
+    )
+    presign_url: str = (
+        "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api/v1/uploads/presign"
+    )
+    request_timeout_seconds: int = Field(default=30, ge=1, le=300)
+    # AWS direct multipart upload caps at 4 MB.
+    max_upload_bytes: int = Field(default=4_194_304, ge=1)
+    # VLM backend for the photo assessment: auto | mock | openai | claude | bedrock.
+    # "auto" prefers a configured cloud VLM and falls back to the offline heuristic.
+    vlm_backend: str = "auto"
+
+
 class Settings(BaseSettings):
     """Runtime settings loaded from config.yaml, environment variables, or a local .env file."""
 
@@ -48,6 +71,7 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
     port: int = Field(default=8000, ge=1, le=65535, alias="PORT")
     roboflow: RoboflowSettings = Field(default_factory=RoboflowSettings)
+    uploads: UploadsSettings = Field(default_factory=UploadsSettings)
 
     @field_validator("cors_origins")
     @classmethod

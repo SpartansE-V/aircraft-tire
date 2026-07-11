@@ -10,3 +10,10 @@ roboflow:
     model_id: "tyre_tread_depth_set/1"
     model_confidence_threshold: 0.2
     filter_confidence_threshold: 0.5
+
+uploads:
+  direct_url: "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api/v1/uploads/images"
+  presign_url: "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api/v1/uploads/presign"
+  request_timeout_seconds: 30
+  max_upload_bytes: 4194304
+  vlm_backend: "auto"
