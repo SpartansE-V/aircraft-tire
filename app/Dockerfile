@@ -19,7 +19,7 @@ RUN apt-get update && \
 
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra ai
 
 # app/ carries the code plus the RUL endpoint's runtime inputs — scoring thresholds
 # (app/tire_rul/config/) and the fitted population prior (app/tire_rul/artifacts/mixedlm_covariance.pkl,
