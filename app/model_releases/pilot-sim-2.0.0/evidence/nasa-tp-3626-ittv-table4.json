@@ -1,0 +1,149 @@
+{
+  "schema_version": "1.0",
+  "benchmark_id": "nasa-tp-3626-ittv-table4",
+  "evidence_role": "NON_TARGET_PHYSICAL_TEST_BENCHMARK",
+  "calibration_claim": "NOT_SUITABLE_FOR_TARGET_CALIBRATION",
+  "source": {
+    "document_id": "NASA-TP-3626",
+    "title": "Texture Modification of the Shuttle Landing Facility Runway at Kennedy Space Center",
+    "publication_date": "1997-05-01",
+    "ntrs_record_url": "https://ntrs.nasa.gov/citations/19970021237",
+    "download_url": "https://ntrs.nasa.gov/api/citations/19970021237/downloads/19970021237.pdf",
+    "source_pdf_sha256": "7b9057f5a409031a5ac6b41c63c07001c647ce548cf3cd338d9e6ceef9e51bb2",
+    "printed_table": "Tables 1 and 4, report pages 17 and 20",
+    "distribution": "PUBLIC",
+    "copyright_determination": "GOV_PUBLIC_USE_PERMITTED",
+    "extraction_method": "Manual transcription from the printed table, visually verified against the NASA PDF"
+  },
+  "test_configuration": {
+    "tire_size": "20 x 4.4",
+    "tire_type": "Type VII",
+    "construction": "BIAS",
+    "ply_rating": 14,
+    "rated_load_lbf": 6000.0,
+    "rated_pressure_psi": 265.0,
+    "test_pressure_psi": 350.0,
+    "vertical_load_lbf": 4500.0,
+    "yaw_angle_deg": 8.0,
+    "vehicle_speed_mph": 25.0,
+    "surface_state": "DRY",
+    "nominal_accumulated_distance_ft": 4000.0,
+    "new_tire_per_surface": true,
+    "wear_measurement": "Slope of tire-and-wheel weight loss versus rollout distance"
+  },
+  "observations": [
+    {
+      "test_surface": 1,
+      "texture_modification": "Methacrylate: double coating",
+      "wear_rate_lbm_per_ft": null,
+      "average_texture_depth_in": 0.0056
+    },
+    {
+      "test_surface": 2,
+      "texture_modification": "Methacrylate: single coating",
+      "wear_rate_lbm_per_ft": 0.0003084,
+      "average_texture_depth_in": 0.0123
+    },
+    {
+      "test_surface": 3,
+      "texture_modification": "Skidabrader: 100 ft/min, longitudinally ground zone",
+      "wear_rate_lbm_per_ft": 0.0003304,
+      "average_texture_depth_in": 0.0104
+    },
+    {
+      "test_surface": 4,
+      "texture_modification": "Skidabrader: 100 ft/min, transversely grooved zone",
+      "wear_rate_lbm_per_ft": 0.0004185,
+      "average_texture_depth_in": 0.0130
+    },
+    {
+      "test_surface": 5,
+      "texture_modification": "Skidabrader: 150 ft/min, longitudinally ground zone",
+      "wear_rate_lbm_per_ft": 0.0003304,
+      "average_texture_depth_in": 0.0115
+    },
+    {
+      "test_surface": 6,
+      "texture_modification": "Skidabrader: 150 ft/min, transversely grooved zone",
+      "wear_rate_lbm_per_ft": 0.0005066,
+      "average_texture_depth_in": 0.0159
+    },
+    {
+      "test_surface": 7,
+      "texture_modification": "Skidabrader: 220 ft/min, longitudinally ground zone",
+      "wear_rate_lbm_per_ft": null,
+      "average_texture_depth_in": 0.0119
+    },
+    {
+      "test_surface": 8,
+      "texture_modification": "Skidabrader: 220 ft/min, transversely grooved zone",
+      "wear_rate_lbm_per_ft": null,
+      "average_texture_depth_in": 0.0136
+    },
+    {
+      "test_surface": 9,
+      "texture_modification": "Rotopeening: longitudinal",
+      "wear_rate_lbm_per_ft": null,
+      "average_texture_depth_in": 0.0083
+    },
+    {
+      "test_surface": 10,
+      "texture_modification": "Rotopeening: lateral",
+      "wear_rate_lbm_per_ft": 0.0002423,
+      "average_texture_depth_in": 0.0108
+    },
+    {
+      "test_surface": 11,
+      "texture_modification": "Rotopeening: longitudinal, new belt",
+      "wear_rate_lbm_per_ft": 0.0003304,
+      "average_texture_depth_in": 0.0104
+    },
+    {
+      "test_surface": 12,
+      "texture_modification": "Rotopeening: longitudinal",
+      "wear_rate_lbm_per_ft": null,
+      "average_texture_depth_in": 0.0088
+    },
+    {
+      "test_surface": 13,
+      "texture_modification": "Rotopeening: longitudinal, transversely grooved zone",
+      "wear_rate_lbm_per_ft": 0.0004405,
+      "average_texture_depth_in": 0.0119
+    },
+    {
+      "test_surface": 14,
+      "texture_modification": "Solid head-cutter diamond grinding, longitudinally ground zone",
+      "wear_rate_lbm_per_ft": null,
+      "average_texture_depth_in": 0.0046
+    },
+    {
+      "test_surface": 15,
+      "texture_modification": "Solid head-cutter diamond grinding, transversely grooved zone",
+      "wear_rate_lbm_per_ft": 0.0001982,
+      "average_texture_depth_in": 0.0062
+    },
+    {
+      "test_surface": 16,
+      "texture_modification": "Diamond saw grinding: 5 blades/in",
+      "wear_rate_lbm_per_ft": 0.0004185,
+      "average_texture_depth_in": 0.0108
+    },
+    {
+      "test_surface": 17,
+      "texture_modification": "None: original corduroy touchdown zone",
+      "wear_rate_lbm_per_ft": 0.0006167,
+      "average_texture_depth_in": 0.0210
+    },
+    {
+      "test_surface": 18,
+      "texture_modification": "None: original center section",
+      "wear_rate_lbm_per_ft": 0.0005947,
+      "average_texture_depth_in": 0.0192
+    }
+  ],
+  "limitations": [
+    "The published values are aggregate per-surface wear-rate slopes, not pass-level observations.",
+    "The 20 x 4.4 Type VII bias tire and test conditions do not match the Boeing 737-800 APR04450 target.",
+    "The artifact may support texture-effect research and benchmark checks only; it cannot establish target calibration, validation, approved limits, maintenance action, or dispatch eligibility."
+  ]
+}

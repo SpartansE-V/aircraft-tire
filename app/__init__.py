@@ -1,1 +1,1 @@
-"""Aircraft tire wear-severity calculator API."""
+"""Aircraft tire assessment API."""

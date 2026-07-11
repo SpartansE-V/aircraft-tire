@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from uuid import uuid4
 
+from app.domain.model_parameter_schemas import BaseSeverityParameters, ModelParameterSet
 from app.domain.schemas import (
     GearValue,
     PressureEffect,
@@ -13,6 +14,7 @@ from app.domain.schemas import (
     WearSeverityResponse,
 )
 from app.services import model_config
+from app.services.model_registry import ACTIVE_MODEL_RELEASE_ID, ModelRegistry
 
 
 @dataclass(frozen=True)
@@ -24,20 +26,31 @@ class RawWearResult:
     pressure_multiplier: float
 
 
-def classify_severity(severity_index: int) -> SeverityLevel:
+def _default_parameters() -> ModelParameterSet:
+    return ModelRegistry().load_release(ACTIVE_MODEL_RELEASE_ID).parameters
+
+
+def classify_severity(
+    severity_index: int,
+    parameters: BaseSeverityParameters | None = None,
+) -> SeverityLevel:
     """Map a severity index to its configured planning category."""
 
-    if severity_index < model_config.MODERATE_THRESHOLD:
+    active_parameters = parameters or _default_parameters().base_severity
+    if severity_index < active_parameters.moderate_threshold:
         return "LOW"
-    if severity_index < model_config.HIGH_THRESHOLD:
+    if severity_index < active_parameters.high_threshold:
         return "MODERATE"
-    if severity_index < model_config.CRITICAL_THRESHOLD:
+    if severity_index < active_parameters.critical_threshold:
         return "HIGH"
     return "CRITICAL"
 
 
 class WearCalculator:
     """Calculate a stateless tire wear-severity estimate."""
+
+    def __init__(self, parameters: ModelParameterSet | None = None) -> None:
+        self._parameters = parameters or _default_parameters()
 
     def calculate_raw_values(
         self,
@@ -50,37 +63,37 @@ class WearCalculator:
         outside_air_temperature_c: float,
         under_inflation_pct: float,
     ) -> RawWearResult:
+        severity_parameters = self._parameters.base_severity
         spin_energy = (
-            touchdown_speed_ms / model_config.REFERENCE_TOUCHDOWN_SPEED_MS
-        ) ** model_config.SPIN_EXPONENT
-        brake_energy = (landing_weight_kg / model_config.REFERENCE_LANDING_WEIGHT_KG) * spin_energy
+            touchdown_speed_ms / severity_parameters.reference_touchdown_speed_ms
+        ) ** severity_parameters.spin_exponent
+        brake_energy = (
+            landing_weight_kg / severity_parameters.reference_landing_weight_kg
+        ) * spin_energy
         lateral_work = (
-            model_config.UNIT_MULTIPLIER
-            + model_config.CROSSWIND_FACTOR * crosswind_kt
-            + model_config.TAXI_DISTANCE_FACTOR
-            * (
-                taxi_distance_km / model_config.REFERENCE_TAXI_DISTANCE_KM
-                - model_config.UNIT_MULTIPLIER
-            )
+            1.0
+            + severity_parameters.crosswind_factor * crosswind_kt
+            + severity_parameters.taxi_distance_factor
+            * (taxi_distance_km / severity_parameters.reference_taxi_distance_km - 1.0)
         )
-        temperature_multiplier = model_config.UNIT_MULTIPLIER + model_config.TEMPERATURE_FACTOR * (
-            outside_air_temperature_c - model_config.REFERENCE_TEMPERATURE_C
+        temperature_multiplier = 1.0 + severity_parameters.temperature_factor * (
+            outside_air_temperature_c - severity_parameters.reference_temperature_c
         )
-        pressure_multiplier = model_config.PRESSURE_BASE ** (
-            under_inflation_pct / model_config.REFERENCE_PRESSURE_DELTA_PCT
+        pressure_multiplier = severity_parameters.pressure_base ** (
+            under_inflation_pct / severity_parameters.reference_pressure_delta_pct
         )
         operational_severity = (
-            model_config.SPIN_WEIGHT * spin_energy
-            + model_config.BRAKE_WEIGHT * brake_energy
-            + model_config.LATERAL_WEIGHT * lateral_work
+            severity_parameters.spin_weight * spin_energy
+            + severity_parameters.brake_weight * brake_energy
+            + severity_parameters.lateral_weight * lateral_work
         )
         severity = max(
-            model_config.MINIMUM_SEVERITY,
+            severity_parameters.minimum_severity,
             operational_severity * temperature_multiplier * pressure_multiplier,
         )
 
-        gear_configuration = model_config.GEAR_CONFIGURATIONS[gear]
-        wear_rate = gear_configuration.base_wear_rate * severity
+        gear_configuration = self._parameters.gear_configurations.for_gear(gear)
+        wear_rate = gear_configuration.base_wear_rate_mm_per_cycle * severity
 
         return RawWearResult(
             severity=severity,
@@ -101,16 +114,20 @@ class WearCalculator:
 
     def calculate(self, request: WearSeverityRequest) -> WearSeverityResponse:
         raw_result = self.calculate_raw(request)
-        gear_configuration = model_config.GEAR_CONFIGURATIONS[request.gear]
+        severity_parameters = self._parameters.base_severity
+        gear_configuration = self._parameters.gear_configurations.for_gear(request.gear)
+        profile = next(
+            profile for profile in self._parameters.profiles if profile.gear == request.gear
+        )
         estimated_tread_life_cycles = round(
-            (model_config.INITIAL_TREAD_DEPTH_MM - model_config.MINIMUM_TREAD_DEPTH_MM)
+            (profile.initial_tread_depth_mm - profile.planning_threshold_mm)
             / raw_result.wear_rate_mm_per_cycle
         )
-        severity_index = round(raw_result.severity * model_config.SEVERITY_INDEX_SCALE)
-        severity_level = classify_severity(severity_index)
+        severity_index = round(raw_result.severity * severity_parameters.severity_index_scale)
+        severity_level = classify_severity(severity_index, severity_parameters)
         severity_configuration = model_config.SEVERITY_CONFIGURATIONS[severity_level]
         pressure_warning = (
-            request.under_inflation_pct >= model_config.PRESSURE_WARNING_THRESHOLD_PCT
+            request.under_inflation_pct >= severity_parameters.pressure_warning_threshold_pct
         )
 
         return WearSeverityResponse(
@@ -138,9 +155,6 @@ class WearCalculator:
                 attention=severity_configuration.attention,
                 message=severity_configuration.message,
             ),
-            model_version=model_config.MODEL_VERSION,
+            model_version=severity_parameters.model_version,
             disclaimer=model_config.DISCLAIMER,
         )
-
-
-calculator = WearCalculator()

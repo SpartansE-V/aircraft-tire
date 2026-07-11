@@ -37,8 +37,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=SERVICE_VERSION,
         description=(
             "Assess current and future aircraft-tire condition from measured condition and "
-            "bounded operating assumptions. Results support inspection planning only and do not "
-            "replace physical inspection, approved maintenance data, or engineering approval."
+            "bounded operating assumptions. The active development release supports scenario "
+            "planning only and does not replace physical inspection, approved maintenance data, "
+            "or engineering approval."
         ),
         docs_url="/docs",
         redoc_url=None,

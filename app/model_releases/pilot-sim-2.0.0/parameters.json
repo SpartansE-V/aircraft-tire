@@ -1,0 +1,143 @@
+{
+  "schema_version": "1.0",
+  "release_id": "pilot-sim-2.0.0",
+  "parameter_status": "UNCALIBRATED_PILOT_ASSUMPTIONS",
+  "target_identity": null,
+  "input_domain": {
+    "touchdown_speed_ms": {"minimum": 58.0, "maximum": 82.0},
+    "landing_weight_kg": {"minimum": 50000.0, "maximum": 73500.0},
+    "crosswind_kt": {"minimum": 0.0, "maximum": 25.0},
+    "touchdown_sink_rate_ms": {"minimum": 0.0, "maximum": 4.0},
+    "touchdown_yaw_angle_deg": {"minimum": 0.0, "maximum": 15.0},
+    "taxi_distance_km": {"minimum": 0.5, "maximum": 8.0},
+    "average_taxi_speed_kt": {"minimum": 0.0, "maximum": 30.0},
+    "outside_air_temperature_c": {"minimum": 5.0, "maximum": 45.0},
+    "brake_temperature_c": {"minimum": 0.0, "maximum": 600.0},
+    "under_inflation_pct": {"minimum": 0.0, "maximum": 10.0}
+  },
+  "base_severity": {
+    "model_version": "pilot-1.0.0",
+    "reference_touchdown_speed_ms": 69.0,
+    "reference_landing_weight_kg": 62000.0,
+    "reference_taxi_distance_km": 2.8,
+    "reference_temperature_c": 15.0,
+    "reference_pressure_delta_pct": 5.0,
+    "spin_exponent": 2.0,
+    "crosswind_factor": 0.012,
+    "taxi_distance_factor": 0.05,
+    "temperature_factor": 0.006,
+    "pressure_base": 2.0,
+    "spin_weight": 0.55,
+    "brake_weight": 0.3,
+    "lateral_weight": 0.15,
+    "minimum_severity": 0.1,
+    "severity_index_scale": 100,
+    "moderate_threshold": 90,
+    "high_threshold": 120,
+    "critical_threshold": 170,
+    "pressure_warning_threshold_pct": 5.0
+  },
+  "gear_configurations": {
+    "main": {
+      "label": "Main gear",
+      "base_wear_rate_mm_per_cycle": 0.04
+    },
+    "nose": {
+      "label": "Nose gear",
+      "base_wear_rate_mm_per_cycle": 0.0285
+    }
+  },
+  "simulation": {
+    "uncertainty_sigma": 0.15,
+    "sink_rate_reference_ms": 1.0,
+    "sink_rate_factor": 0.1,
+    "yaw_factor": 0.012,
+    "taxi_speed_reference_kt": 15.0,
+    "taxi_speed_factor": 0.008,
+    "brake_temperature_reference_c": 200.0,
+    "brake_temperature_factor": 0.0004,
+    "heavy_braking_factor": 1.12,
+    "runway_factors": {
+      "DRY": 1.0,
+      "WET": 1.03,
+      "CONTAMINATED": 1.08,
+      "ROUGH": 1.12
+    }
+  },
+  "synthetic_removal": {
+    "status": "SYNTHETIC_PILOT_ASSUMPTIONS",
+    "retread_count_reference": 3.0,
+    "tire_temperature_reference_c": 30.0,
+    "tire_temperature_span_c": 90.0,
+    "brake_temperature_reference_c": 200.0,
+    "brake_temperature_span_c": 400.0,
+    "runway_exposure": {
+      "DRY": 0.0,
+      "WET": 0.25,
+      "CONTAMINATED": 0.75,
+      "ROUGH": 1.0
+    },
+    "modes": {
+      "fod_damage": {
+        "baseline": 0.0001,
+        "taxi_exposure": 0.0003,
+        "runway_exposure": 0.0008
+      },
+      "cut_or_exposed_cord": {
+        "baseline": 0.00005,
+        "taxi_exposure": 0.0002,
+        "runway_exposure": 0.0005
+      },
+      "bulge": {
+        "baseline": 0.00002,
+        "pressure_deficit": 0.0004,
+        "installed_age": 0.0001,
+        "retread_count": 0.00015
+      },
+      "tread_separation": {
+        "baseline": 0.00002,
+        "pressure_deficit": 0.00035,
+        "installed_age": 0.0001,
+        "retread_count": 0.0002,
+        "brake_heat": 0.00025
+      },
+      "heat_damage": {
+        "baseline": 0.00002,
+        "tire_temperature": 0.0001,
+        "heavy_braking": 0.00025,
+        "brake_heat": 0.0005
+      },
+      "flat_spot": {
+        "baseline": 0.00002,
+        "heavy_braking": 0.00045,
+        "brake_heat": 0.0002
+      },
+      "contamination": {
+        "baseline": 0.00002,
+        "runway_exposure": 0.0008
+      },
+      "sudden_pressure_loss": {
+        "baseline": 0.00002,
+        "pressure_deficit": 0.0004,
+        "retread_count": 0.00015,
+        "runway_exposure": 0.00025
+      }
+    }
+  },
+  "profiles": [
+    {
+      "profile_id": "pilot-main-v1",
+      "display_name": "Pilot main-gear demonstration profile",
+      "gear": "main",
+      "initial_tread_depth_mm": 10.9,
+      "planning_threshold_mm": 1.0
+    },
+    {
+      "profile_id": "pilot-nose-v1",
+      "display_name": "Pilot nose-gear demonstration profile",
+      "gear": "nose",
+      "initial_tread_depth_mm": 10.9,
+      "planning_threshold_mm": 1.0
+    }
+  ]
+}

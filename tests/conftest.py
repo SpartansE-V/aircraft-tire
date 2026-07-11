@@ -25,6 +25,7 @@ def nominal_payload() -> dict[str, object]:
 @pytest.fixture
 def simulation_payload() -> dict[str, object]:
     return {
+        "intended_use": "SCENARIO_PLANNING",
         "profile_id": "pilot-main-v1",
         "current_condition": {
             "cycles_since_install": 94,

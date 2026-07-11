@@ -23,7 +23,30 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync
-      - run: uv run pytest -q
+
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      - name: Check formatting
+        run: uv run ruff format --check app tests
+
+      - name: Lint application and tests
+        run: uv run ruff check app tests
+
+      - name: Type-check application
+        run: uv run mypy app
+
+      - name: Verify model evidence and calibration contracts
+        run: >-
+          uv run pytest
+          tests/test_model_registry.py
+          tests/test_calibration_dataset.py
+          tests/test_calibration_validation.py
+          tests/test_physical_benchmark.py
+          -q
+
+      - name: Run test suite
+        run: uv run pytest -q
 
   build-and-push:
     needs: test
