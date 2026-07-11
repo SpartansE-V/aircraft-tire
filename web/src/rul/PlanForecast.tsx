@@ -11,6 +11,7 @@ import {
   type WheelStatusResponse,
 } from './api'
 import { CANON_POSITIONS, fmtDate, fmtLandings, POSITION_LABEL, RUL_STATUS_META, severityInk } from './positions'
+import TireImageCard from '../TireImageCard'
 
 const inputCls =
   'w-full border border-[var(--line-2)] bg-[var(--panel)] px-2 py-1 text-xs tabular-nums text-[var(--ink-2)] outline-none focus:border-[var(--primary)]'
@@ -75,6 +76,7 @@ export default function PlanForecast() {
   const [submitted, setSubmitted] = useState<RulPredictionRequest[]>([])
   const [conditions, setConditions] = useState<FlightConditions>(DEFAULT_CONDITIONS)
   const [sensors, setSensors] = useState<NgafidFlightSensors>(DEFAULT_SENSORS)
+  const [photoPosition, setPhotoPosition] = useState<WheelPosition | null>(null)
 
   const fleet = useWorklist(50, null)
   const tails = useMemo(
@@ -167,6 +169,7 @@ export default function PlanForecast() {
               onChange={(event) => {
                 setTail(event.target.value)
                 setSubmitted([])
+                setPhotoPosition(null)
                 setClientError(null)
               }}
               className={`${inputCls} mt-1`}
@@ -264,7 +267,7 @@ export default function PlanForecast() {
           <div className="border-t border-dashed border-[var(--line)] pt-3">
             <div className="mb-2 flex flex-wrap justify-between gap-2 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">
               <span>{isLoadingWheels ? 'Loading mounted tires…' : `${mounted.filter((wheel) => wheel.status).length} mounted tires loaded`}</span>
-              <span>RUL per tire · priority includes position consequence</span>
+              <span className="text-[var(--primary)]">Click a wheel to screen a photo</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-[11px]">
@@ -283,9 +286,21 @@ export default function PlanForecast() {
                     const baseline = row.baseline
                     const prediction = row.prediction
                     const position = baseline?.position ?? row.request?.position ?? CANON_POSITIONS[index]
+                    const picked = photoPosition === position
                     return (
-                      <tr key={position} className="border-b border-[var(--line)] last:border-0">
-                        <td className="py-2 pr-3 text-[var(--ink-2)]">{POSITION_LABEL[position]}</td>
+                      <tr
+                        key={position}
+                        onClick={() => setPhotoPosition(picked ? null : position)}
+                        aria-selected={picked}
+                        className="cursor-pointer border-b border-[var(--line)] transition-colors last:border-0 hover:bg-[var(--panel)]"
+                        style={picked ? { background: 'var(--primary-soft)' } : undefined}
+                      >
+                        <td className="py-2 pr-3 text-[var(--ink-2)]">
+                          <span style={picked ? { color: 'var(--primary)' } : undefined}>
+                            {picked ? '▸ ' : ''}
+                            {POSITION_LABEL[position]}
+                          </span>
+                        </td>
                         <td className="py-2 pr-3 text-right tabular-nums">{baseline ? fmtLandings(baseline.current_cycles) : '—'}</td>
                         <td className="py-2 pr-3 text-right tabular-nums">{baseline?.priority.toFixed(3) ?? '—'}</td>
                         <td className="py-2 pr-3 text-right tabular-nums">
@@ -309,6 +324,16 @@ export default function PlanForecast() {
                 </tbody>
               </table>
             </div>
+
+            {photoPosition && (
+              <div className="mt-3">
+                <TireImageCard
+                  id={`${tail}:${photoPosition}`}
+                  aircraftId={tail}
+                  label={`${tail} · ${POSITION_LABEL[photoPosition]}`}
+                />
+              </div>
+            )}
           </div>
         )}
 
