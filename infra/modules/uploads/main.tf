@@ -153,6 +153,13 @@ data "aws_iam_policy_document" "upload_presigner_s3" {
   }
 
   statement {
+    sid       = "ReadUploadObjects"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.uploads.arn}/uploads/*"]
+  }
+
+  statement {
     sid    = "WriteImageMetadata"
     effect = "Allow"
     actions = [
