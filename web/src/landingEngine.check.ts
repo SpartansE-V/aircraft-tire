@@ -28,7 +28,7 @@ const landing = {
   elevFt: track.elevFt,
   runwayM: track.lengthM,
 }
-const attitude: Attitude = { pitchDeg: 4, rollDeg: 0, crabDeg: 0 }
+const attitude: Attitude = { pitchDeg: 4, rollDeg: 0, crabDeg: 0, liftShare: 0 }
 const selectedTireId = 'L1'
 const tire = FLEET_TIRES.find((t) => t.id === selectedTireId)!
 const scalar = simulate(landing, tire)
@@ -37,8 +37,7 @@ const repeat = simulateLandingRun({ landing, attitude, track, tires: FLEET_TIRES
 
 assert.ok(run.frames.length > 10, 'engine should expose a fixed-step timeline')
 assert.equal(run.frames.at(-1)?.phase, 'stopped')
-assert.equal(run.summary.status, scalar.status)
-assert.ok(Math.abs(run.summary.stopDistM - scalar.stopDistM) < 1e-9, 'engine summary should preserve scalar stop distance')
+assert.ok(run.summary.stopDistM >= scalar.stopDistM, 'engine summary should include wheel/runway condition losses on top of scalar baseline')
 assert.deepEqual(
   repeat.frames.map((f) => [f.tS, f.phase, Math.round(f.pose.xM), Math.round(f.speedMps)]),
   run.frames.map((f) => [f.tS, f.phase, Math.round(f.pose.xM), Math.round(f.speedMps)]),
@@ -64,6 +63,37 @@ assert.ok(crabbed.summary.perWheel.L1.scrubMm > levelNoWind.summary.perWheel.L1.
 const lightBraking = simulateLandingRun({ landing: { ...landing, brakeShare: 0.25 }, attitude, track, tires: FLEET_TIRES, selectedTireId })
 assert.ok(lightBraking.summary.stopDistM > run.summary.stopDistM, 'engine stop distance should follow brake share')
 assert.ok(lightBraking.frames.length > run.frames.length, 'timeline should show longer slowing-down with less braking')
+
+const lifted = simulateLandingRun({ landing, attitude: { ...attitude, liftShare: 0.5 }, track, tires: FLEET_TIRES, selectedTireId })
+assert.ok(lifted.summary.perWheel.L1.peakLoadKN < run.summary.perWheel.L1.peakLoadKN, 'lift remaining should reduce touchdown wheel load')
+assert.ok(lifted.summary.stopDistM > run.summary.stopDistM, 'lift remaining should delay full wheel braking')
+
+const tailstrike = simulateLandingRun({ landing, attitude: { ...attitude, pitchDeg: 12 }, track, tires: FLEET_TIRES, selectedTireId })
+assert.ok(tailstrike.summary.stopDistM > run.summary.stopDistM, 'high flare pitch should float farther down the runway')
+assert.ok(tailstrike.summary.flags.some((f) => /tailstrike/i.test(f)), 'high pitch should raise a tailstrike risk flag')
+
+const deflated = FLEET_TIRES.map((t) => (t.id === selectedTireId ? { ...t, psi: t.psiTarget * 0.9 } : t))
+const deflatedRun = simulateLandingRun({ landing, attitude, track, tires: deflated, selectedTireId })
+assert.ok(deflatedRun.summary.perWheel.L1.scrubMm > run.summary.perWheel.L1.scrubMm, 'per-wheel underinflation should increase that wheel scrub')
+
+const wornFleet = FLEET_TIRES.map((t) =>
+  t.gear === 'nose'
+    ? t
+    : {
+        ...t,
+        grooves: [t.grooveLimit + 0.2, t.grooveLimit + 0.25, t.grooveLimit + 0.3, t.grooveLimit + 0.2],
+        defects: [...t.defects, { kind: 'damage' as const, label: 'check high defect', severity: 'high' as const, zone: 'Tread', at: [0, 0, 0] as [number, number, number], r: 0.2 }],
+      },
+)
+const wornRun = simulateLandingRun({ landing, attitude, track, tires: wornFleet, selectedTireId })
+assert.ok(wornRun.summary.stopDistM > run.summary.stopDistM, 'worn/damaged fleet should reduce braking grip')
+assert.ok(wornRun.summary.perWheel.L1.scrubMm > run.summary.perWheel.L1.scrubMm, 'worn/damaged selected wheel should increase scrub')
+assert.ok(wornRun.summary.flags.some((f) => /defect|tread/i.test(f)), 'worn/damaged selected wheel should raise condition flags')
+
+const lowRwyccTrack = { ...track, rwycc: 2 }
+const lowRwyccRun = simulateLandingRun({ landing, attitude, track: lowRwyccTrack, tires: FLEET_TIRES, selectedTireId })
+assert.ok(lowRwyccRun.summary.stopDistM > run.summary.stopDistM, 'low RWYCC track should reduce braking grip')
+assert.ok(lowRwyccRun.summary.flags.some((f) => /RWYCC 2/.test(f)), 'low RWYCC should raise a runway-condition flag')
 
 const overrun = simulateLandingRun({ landing: { ...landing, gsKt: 175, surface: 'contaminated', runwayM: 800 }, attitude, track, tires: FLEET_TIRES, selectedTireId })
 assert.equal(overrun.frames.at(-1)?.phase, 'overrun', 'short contaminated runway should end as overrun')

@@ -65,7 +65,7 @@ export function simulate(l: Landing, tire: { grooves: number[]; grooveLimit: num
     (loadPerTireKN / refLoadKN) *
     (gsTrueKt / CAL.refGsKt) ** 2 *
     CAL.scrubSurface[l.surface] *
-    (1 + deflationPenalty(tire))
+    tirePressureScrubFactor(tire)
 
   // Braking: total kinetic energy is fixed by mass and speed; the surface only sets how far it takes.
   const keMJ = (0.5 * massKg * vGround ** 2) / 1e6
@@ -100,8 +100,8 @@ export function simulate(l: Landing, tire: { grooves: number[]; grooveLimit: num
 }
 
 // Under-inflation flexes the sidewall and drags the shoulder — more scrub, hotter carcass.
-function deflationPenalty(tire: { psi: number; psiTarget: number }) {
-  return Math.max(0, (tire.psiTarget - tire.psi) / tire.psiTarget) * 2
+export function tirePressureScrubFactor(tire: { psi: number; psiTarget: number }) {
+  return 1 + Math.max(0, (tire.psiTarget - tire.psi) / tire.psiTarget) * 2
 }
 
 export function trueGroundSpeedMps(l: Landing) {

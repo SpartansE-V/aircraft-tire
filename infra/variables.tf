@@ -40,6 +40,12 @@ variable "image_tag_reconstructor" {
   default     = "latest"
 }
 
+variable "image_tag_web" {
+  description = "Image tag to deploy for the web (frontend) service. CI overrides this per build (commit SHA)."
+  type        = string
+  default     = "latest"
+}
+
 variable "github_repo" {
   description = "GitHub repo allowed to assume the deploy role, as org/repo."
   type        = string

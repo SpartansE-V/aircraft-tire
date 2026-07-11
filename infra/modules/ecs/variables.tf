@@ -65,6 +65,35 @@ variable "environment" {
   default = []
 }
 
+variable "launch_type" {
+  description = "FARGATE or EC2. EC2 is required for GPU tasks - Fargate has no GPU support."
+  type        = string
+  default     = "FARGATE"
+
+  validation {
+    condition     = contains(["FARGATE", "EC2"], var.launch_type)
+    error_message = "launch_type must be FARGATE or EC2."
+  }
+}
+
+variable "capacity_provider_name" {
+  description = "ECS capacity provider to use when launch_type = \"EC2\". Ignored for FARGATE."
+  type        = string
+  default     = null
+}
+
+variable "gpu_count" {
+  description = "Number of GPUs to request via container resourceRequirements. 0 = no GPU requirement."
+  type        = number
+  default     = 0
+}
+
+variable "enable_autoscaling" {
+  description = "Whether to create an Application Auto Scaling target/policy for this service."
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
