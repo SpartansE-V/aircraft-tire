@@ -100,16 +100,75 @@ function buildWheel(beadR: number, halfW: number) {
   return g
 }
 
+/**
+ * What the runway is doing to this tyre, right now.
+ *
+ * `contactDeg` is where the tarmac is touching it, around its own tread. `peakDeg` is where it was
+ * touching at the instant the tyre was hit hardest — the arc that actually took the landing. Both are
+ * drawn in blue, which is the one hue the tyre does not already use: black rubber, amber wear, red
+ * damage. Blue is the runway.
+ */
+export type Impact = {
+  contactDeg: number
+  arcDeg: number
+  loadKN: number
+  peakLoadKN: number
+  peakDeg: number
+  peakArcDeg: number
+  slipMps: number
+  contact: boolean
+}
+
+const IMPACT_HUE = 0x35c8f0
+
+/**
+ * A band of tread, drawn as an open cylinder arc: an arc about the tyre's axle IS a strip of tread.
+ * `arcDeg` is how much of the circumference it covers, and that is not decoration — a harder-loaded
+ * tyre squashes flatter and touches the runway along a longer patch.
+ *
+ * The band goes on as a child of the tyre mesh, so it works in that mesh's *local* frame — where the
+ * axle is +Y (the bounding box is 2 × 0.826 × 2; the odd dimension is the width). A CylinderGeometry
+ * is already built around +Y, so it needs no rotation at all. The mesh's own 90° quaternion is what
+ * swings the whole thing to lie on its side in the scene, and the band comes along for the ride.
+ */
+function treadBand(radius: number, width: number, arcDeg: number, opacity: number) {
+  const geo = new THREE.CylinderGeometry(radius, radius, width, 48, 1, true, 0, (arcDeg * Math.PI) / 180)
+  return new THREE.Mesh(
+    geo,
+    new THREE.MeshBasicMaterial({
+      color: IMPACT_HUE,
+      transparent: true,
+      opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  )
+}
+
+/** Radius and width of the tread, from the mesh's own geometry — the axle is the odd axis out. */
+function treadSize(geo: THREE.BufferGeometry) {
+  geo.computeBoundingBox()
+  const b = geo.boundingBox!.getSize(new THREE.Vector3())
+  return { radius: Math.max(b.x, b.z) / 2, width: b.y }
+}
+
 // ponytail: full scene rebuild when the selected wheel changes — the GLB is 350 kB and
 // browser-cached, and it's one mesh. Diff the geometry only if switching ever feels slow.
 export default function TireViewer({
   defects,
   serial,
   theme,
+  impact,
+  compact = false,
 }: {
   defects: Defect[]
   serial: string
   theme: 'dark' | 'light'
+  impact?: Impact
+  /** The landing page gives this a narrow column, where the type-selector and its notes are wider than
+   *  the panel and land on top of everything else. There, the tyre and the impact are the whole point. */
+  compact?: boolean
 }) {
   const host = useRef<HTMLDivElement>(null)
   const overlay = useRef<HTMLDivElement>(null)
@@ -118,6 +177,11 @@ export default function TireViewer({
   const [error, setError] = useState<string | null>(null)
   const setWireframe = useRef<((w: boolean) => void) | null>(null)
   const tt = TIRE_TYPES[typeIdx]
+
+  // The impact changes every frame of the landing; the scene must not be torn down for that. Hand it
+  // to the render loop through a ref instead of putting it in the effect's dependencies.
+  const impactRef = useRef(impact)
+  impactRef.current = impact
 
   useEffect(() => {
     setError(null)
@@ -148,6 +212,8 @@ export default function TireViewer({
     controls.autoRotateSpeed = 0.9
 
     let mesh: THREE.Mesh | null = null
+    let live: THREE.Mesh | null = null
+    let peak: THREE.Mesh | null = null
 
     new GLTFLoader().load(
       tt.model,
@@ -199,6 +265,13 @@ export default function TireViewer({
         }
         tire.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
 
+        // The runway, on the tyre. Sized off the model's own tread rather than guessed units, so it
+        // still lands on the rubber if the tyre type is swapped.
+        const { radius, width } = treadSize(tire.geometry)
+        peak = treadBand(radius * 1.005, width * 0.98, 1, 0.45) // the arc that took the hit
+        live = treadBand(radius * 1.02, width * 0.86, 1, 0.9) // where the tarmac is touching right now
+        tire.add(peak, live)
+
         setWireframe.current = (w) => {
           mat.wireframe = w
         }
@@ -212,8 +285,44 @@ export default function TireViewer({
     // HTML markers directly (no React re-render in the animation loop).
     const p = new THREE.Vector3()
     const cam = new THREE.Vector3()
+    // Rebuilding an arc's geometry 60 times a second would be silly. The band is built once as a full
+    // ring's worth of arc and then *rotated* into place, with its arc length set by rebuilding only
+    // when the width actually changes — which is when the load changes, not every frame.
+    let liveArc = -1
+    let peakArc = -1
+    const setArc = (m: THREE.Mesh, r: number, w: number, deg: number) => {
+      m.geometry.dispose()
+      m.geometry = new THREE.CylinderGeometry(r, r, w, 48, 1, true, 0, (Math.max(2, deg) * Math.PI) / 180)
+    }
+
     const tick = () => {
       controls.update()
+
+      const im = impactRef.current
+      if (live && peak && mesh) {
+        const on = !!im && im.contact && im.loadKN > 1
+        live.visible = on
+        peak.visible = !!im && im.peakLoadKN > 1
+        if (im && mesh) {
+          const { radius, width } = treadSize(mesh.geometry)
+          if (Math.abs(im.arcDeg - liveArc) > 0.5) {
+            setArc(live, radius * 1.02, width * 0.86, im.arcDeg)
+            liveArc = im.arcDeg
+          }
+          if (Math.abs(im.peakArcDeg - peakArc) > 0.5) {
+            setArc(peak, radius * 1.005, width * 0.98, im.peakArcDeg)
+            peakArc = im.peakArcDeg
+          }
+          // A cylinder arc starts at its own 0 and runs anticlockwise, so centre it on the angle.
+          live.rotation.y = ((im.contactDeg - im.arcDeg / 2) * Math.PI) / 180
+          peak.rotation.y = ((im.peakDeg - im.peakArcDeg / 2) * Math.PI) / 180
+          // Brighter the harder it is being pressed. Sliding tread glows: that is the abrasion.
+          const load = Math.min(1, im.loadKN / Math.max(im.peakLoadKN, 1))
+          const slip = Math.min(1, im.slipMps / 30)
+          ;(live.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.45 * load + 0.25 * slip
+        }
+      }
+
       renderer.render(scene, camera)
       if (mesh && overlay.current) {
         camera.getWorldPosition(cam)
@@ -295,7 +404,7 @@ export default function TireViewer({
       </div>
 
       {/* Construction type — swaps the GLB and tells you what airframe it belongs on. */}
-      <div className="absolute right-4 top-4 w-52 text-right">
+      <div className={`absolute right-4 top-4 w-52 text-right ${compact ? 'hidden' : ''}`}>
         <div className="flex justify-end text-[11px] uppercase tracking-widest">
           {TIRE_TYPES.map((t, i) => (
             <button
@@ -317,7 +426,23 @@ export default function TireViewer({
         <p className="mt-1 text-[10px] leading-relaxed text-[var(--ink-4)]">{tt.note}</p>
       </div>
 
-      <div className="absolute bottom-4 left-4 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">
+      {/* The runway, on this tyre. Blue is the one hue the tyre does not already use — black rubber,
+          amber wear, red damage — so an impact can never be confused for a defect. */}
+      {impact && impact.peakLoadKN > 1 && (
+        <div className="absolute bottom-3 right-3 border-l bg-[var(--panel)]/85 py-1 pl-2 text-right text-[10px] uppercase tracking-widest" style={{ borderColor: `#${IMPACT_HUE.toString(16)}` }}>
+          <div style={{ color: `#${IMPACT_HUE.toString(16)}` }}>■ Runway contact</div>
+          <div className="mt-1 text-[var(--ink-3)]">
+            Hit {Math.round(impact.peakDeg)}° · {Math.round(impact.peakArcDeg)}° of tread · {Math.round(impact.peakLoadKN)} kN
+          </div>
+          <div className="mt-0.5 text-[var(--ink-4)]">
+            {impact.contact
+              ? `Now ${Math.round(impact.contactDeg)}° · ${impact.slipMps > 0.5 ? `sliding ${impact.slipMps.toFixed(0)} m/s` : 'rolling'}`
+              : 'Off the runway'}
+          </div>
+        </div>
+      )}
+
+      <div className={`absolute bottom-4 left-4 text-[10px] uppercase tracking-widest text-[var(--ink-4)] ${compact ? 'hidden' : ''}`}>
         3D laser scan · {serial} · {tt.name} · orbit / scroll to inspect
       </div>
 

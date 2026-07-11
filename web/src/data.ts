@@ -10,6 +10,26 @@ export type Tire = {
   label: string
   gear: 'nose' | 'left' | 'right'
   role: 'inner' | 'outer' | 'nose' // drives turn-load attribution
+  /**
+   * Which axle of the six-wheel truck: 0 forward, 1 mid, 2 aft. Nose gear is 0.
+   *
+   * Not cosmetic. The truck hangs tilted in flight and lands on one axle before the other two, so the
+   * axles do not share a landing equally — which is the whole reason six tyres on one bogie wear at
+   * six different rates, and the reason a tyre app has to know which axle it is looking at.
+   */
+  axle: 0 | 1 | 2
+  /** Rated static load off the sidewall. The landing transient is allowed to exceed it — but by how
+   *  much, and on which axle, is exactly the question a tyre shop asks after a hard arrival. */
+  ratedLoadKN: number
+  radiusM: number // 46 in main, 40 in nose — sets how far round the tyre one revolution goes
+  /**
+   * Where this tyre happened to be pointing when it touched down, in degrees around its own tread.
+   *
+   * Genuinely arbitrary — it depends on where the wheel stopped rolling on the last landing — and it
+   * is *why* a landing lands on one arc of tread rather than another. Seeded per tyre so the page is
+   * stable to look at; in the real world it would come off the wheel-speed sensor's index pulse.
+   */
+  clockDeg: number
   // Identity — OCR off the molded sidewall
   serial: string
   ocrConfidence: number
@@ -134,8 +154,13 @@ function makeTire(i: number, [id, label, gear, role]: (typeof POSITIONS)[number]
     r() > 0.85 && { kind: 'HARD LDG', date: '2026-07-02', note: '2.14 G, sink 612 fpm — inspection raised' },
   ].filter(Boolean) as Tire['events']
 
+  const axle: Tire['axle'] = label.includes('Fwd') ? 0 : label.includes('Mid') ? 1 : label.includes('Aft') ? 2 : 0
+
   return {
-    id, label, gear, role,
+    id, label, gear, role, axle,
+    ratedLoadKN: nose ? 175 : 265,
+    radiusM: nose ? 0.508 : 0.584,
+    clockDeg: Math.round(r() * 360),
     serial: `${['DL', 'MH', 'BR'][i % 3]}${String(72190 + i * 431)}`,
     ocrConfidence: +(0.71 + r() * 0.28).toFixed(2),
     retreads: Math.floor(r() * 4),

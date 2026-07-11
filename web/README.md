@@ -36,6 +36,28 @@ absolute origin at build time. When the fleet dataset is absent the backend retu
 
 ## React + TypeScript + Vite
 
+## Engineer Chat (maintenance agent)
+
+The **Engineer Chat** tab (`/engineer-chat`) is a chat UI for the backend Maintenance Decision
+Agent. It talks to the FastAPI service (`app/api/routes/tire_rul.py`):
+
+- `POST /api/v1/tire_rul/agent/chat` — multi-turn agent chat (Markdown answer + tool-call trace)
+- `GET /api/v1/tire_rul/fleet/worklist` — the live "Fleet priority" rail
+
+The client lives in [`src/agentApi.ts`](src/agentApi.ts); the screen is
+[`src/EngineerChat.tsx`](src/EngineerChat.tsx). The offline `backend` option needs no API key,
+so the agent works out of the box.
+
+**Local dev:** start the backend (`make run`, default `:8000`), then `npm run dev`. Vite proxies
+`/api` to the backend (see [`vite.config.ts`](vite.config.ts)); override the target with
+`VITE_API_PROXY=http://host:port`.
+
+**Production:** the static bundle calls `/api/...` on its own origin. Either reverse-proxy `/api`
+to the API from the web host, or build with `VITE_API_BASE=https://api.example.com` to point it at
+the API origin directly.
+
+---
+
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
 Currently, two official plugins are available:

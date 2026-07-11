@@ -1,3 +1,4 @@
+import EngineerChat from './EngineerChat'
 import SimulateLanding from './SimulateLanding'
 import Tyres from './Tyres'
 import Rul from './rul/Rul'
@@ -9,5 +10,6 @@ export default function App() {
   const path = useRoute()
   if (path === '/simulate-landing') return <SimulateLanding />
   if (path === '/rul') return <Rul />
+  if (path === '/engineer-chat') return <EngineerChat />
   return <Tyres />
 }
