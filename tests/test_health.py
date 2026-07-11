@@ -23,3 +23,11 @@ async def test_health(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/demo", "/demo-assets/demo.css"])
+async def test_removed_demo_routes_return_not_found(client: AsyncClient, path: str) -> None:
+    response = await client.get(path)
+
+    assert response.status_code == 404
