@@ -29,12 +29,14 @@ low-texture, few-image, and rotationally-symmetric scenes where classic SfM
 - `GET  /api/v1/reconstructions/{job_id}/pointmaps`
 - `GET  /api/v1/reconstructions/{job_id}/files` / `/files/{path}`
 
-## Deploy (GPU recommended)
+## Deploy
 
-MASt3R runs on CPU too but is far slower; deploy on a **CUDA GPU host** with the
-NVIDIA Container Toolkit installed. The image is built on
-`pytorch/pytorch:2.1.2-cuda11.8-cudnn8-runtime`, clones `naver/mast3r --recursive`
-(DUSt3R + CroCo submodules), installs deps, and pre-downloads the metric checkpoint.
+The image ships **CPU-only torch** (`python:3.12-slim` base) because the deploy
+target is ECS Fargate (no GPU). It clones `naver/mast3r --recursive` (DUSt3R +
+CroCo submodules), installs deps, and bakes in the metric checkpoint — keeping the
+image ~4–5 GB so Fargate pulls it within its ephemeral storage. MASt3R runs on CPU
+via `device=auto` (slower but correct). For a GPU host, swap the base to
+`pytorch/pytorch:2.1.2-cuda11.8-cudnn8-runtime` and drop the CPU torch install.
 
 ```bash
 cd aircraft-tire/3d-reconstructor

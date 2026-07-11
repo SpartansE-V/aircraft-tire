@@ -1,11 +1,21 @@
-.PHONY: install install-ai run ui data scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
+.PHONY: install install-ai run run-api run-web ui data scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
+
+WEB_DIR := ../web
 
 # --- Backend (API) ---
 install:
-	uv sync
+	uv sync --extra ai
 
 run:
-	uv run uvicorn app.main:app --host 0.0.0.0 --port $${PORT:-8000}
+	@$(MAKE) run-api & api_pid=$$!; \
+	trap 'kill $$api_pid 2>/dev/null || true' EXIT INT TERM; \
+	$(MAKE) run-web
+
+run-api:
+	uv run --extra ai uvicorn app.main:app --app-dir .. --host 0.0.0.0 --port $${PORT:-8000}
+
+run-web:
+	npm run dev --prefix $(WEB_DIR)
 
 # --- AI pipeline (needs the full ML stack: `make install-ai`) ---
 install-ai:

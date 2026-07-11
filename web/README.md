@@ -1,4 +1,40 @@
-# React + TypeScript + Vite
+# Tire Ops — Web
+
+React + Vite dashboard for the aircraft-tire POC. Three routes (`src/App.tsx`):
+
+| Route | What |
+|---|---|
+| `/tyres` | 3D tire dashboard (mock telemetry) + a live **Remaining life** card |
+| `/rul` | **RUL forecast** dashboard — fleet worklist, six-wheel RUL map, per-wheel forecast |
+| `/simulate-landing` | Landing simulation |
+
+## RUL integration (`src/rul/`)
+
+The RUL views call the FastAPI backend at `/api/v1/tire_rul/*` (see `app/api/routes/tire_rul.py`):
+
+- `src/rul/api.ts` — typed client + React Query hooks (`predict`, `fleet/worklist`, `wheel/status`).
+- `src/rul/positions.ts` — maps the 14 dashboard wheels to the 6 canonical model positions.
+- `src/rul/Rul.tsx` — the `/rul` dashboard. `src/rul/RemainingLifeCard.tsx` — the `/tyres` card.
+
+### Running against the backend
+
+```bash
+# 1. backend (repo root) — serves :8000
+make install-ai && make run
+
+# 2. web dev server — proxies /api → :8000 (no CORS)
+cd web && npm install && npm run dev
+```
+
+The dev server proxies `/api` to the backend (`vite.config.ts`); override the target with
+`VITE_API_PROXY=http://host:port npm run dev` if the API runs elsewhere. In production the app calls
+same-origin relative paths — point the static host's `/api` at the API, or set `VITE_API_BASE` to an
+absolute origin at build time. When the fleet dataset is absent the backend returns `503` and the
+`/rul` worklist degrades gracefully; per-wheel `/predict` (the Remaining-life card) still works.
+
+---
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
