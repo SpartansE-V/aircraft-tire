@@ -36,6 +36,16 @@ locals {
       image_tag     = var.image_tag_reconstructor
       environment   = [] # Dockerfile ENV defaults cover COLMAP_* config.
     }
+    web = {
+      name           = "${var.project_name}-web"
+      alb_name       = "${var.project_name}-web"
+      container_port = 80
+      task_cpu       = 256
+      task_memory    = 512
+      desired_count  = 2
+      image_tag      = var.image_tag_web
+      environment    = [] # Static build; no runtime config needed.
+    }
   }
 }
 

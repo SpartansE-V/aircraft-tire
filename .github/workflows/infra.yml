@@ -7,6 +7,14 @@ on:
       - "infra/**"
   workflow_dispatch: {}
 
+# infra.yml and deploy-containers.yml both run `terraform apply` against the
+# same state/lock. A single push can touch both infra/** and a service dir at
+# once, triggering both workflows concurrently - serialize them so they queue
+# instead of racing on the same resources.
+concurrency:
+  group: terraform-aircraft-tire
+  cancel-in-progress: false
+
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read
