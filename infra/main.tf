@@ -41,7 +41,7 @@ locals {
       task_memory        = 8192
       desired_count      = 1
       image_tag          = var.image_tag_reconstructor
-      environment        = [] # Dockerfile ENV defaults cover COLMAP_* config.
+      environment        = []               # Dockerfile ENV defaults cover COLMAP_* config.
       health_check_path  = "/api/v1/health" # health router is mounted under api_prefix
       launch_type        = "FARGATE"
       gpu_count          = 0
@@ -135,9 +135,10 @@ module "ecs" {
 module "uploads" {
   source = "./modules/uploads"
 
-  project_name         = var.project_name
-  cors_allowed_origins = split(",", var.cors_origins)
-  tags                 = local.tags
+  project_name                  = var.project_name
+  cors_allowed_origins          = split(",", var.cors_origins)
+  presigned_url_expiration_secs = var.upload_presigned_url_expiration_secs
+  tags                          = local.tags
 }
 
 resource "aws_iam_role_policy" "task_uploads_access" {

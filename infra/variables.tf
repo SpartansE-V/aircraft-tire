@@ -28,6 +28,17 @@ variable "cors_origins" {
   default     = "http://localhost:3000"
 }
 
+variable "upload_presigned_url_expiration_secs" {
+  description = "Lifetime of S3 upload URLs returned by the upload presigner Lambda."
+  type        = number
+  default     = 900
+
+  validation {
+    condition     = var.upload_presigned_url_expiration_secs >= 60 && var.upload_presigned_url_expiration_secs <= 3600
+    error_message = "upload_presigned_url_expiration_secs must be between 60 and 3600 seconds."
+  }
+}
+
 variable "image_tag_app" {
   description = "Image tag to deploy for the app service. CI overrides this per build (commit SHA)."
   type        = string
