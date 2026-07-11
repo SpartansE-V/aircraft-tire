@@ -1,4 +1,4 @@
-"""Tyre-quality detection orchestration between image inputs and Roboflow inference."""
+"""Image-input orchestration and Roboflow inference controllers."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import UploadFile
 
-from app.config import RoboflowSettings
+from app.config import RoboflowModelSettings, RoboflowSettings
 from app.integrations.roboflow.manager import RoboflowManager
 
 
@@ -26,12 +26,21 @@ class ImageFetchError(RuntimeError):
     """Raised when a public image URL cannot be retrieved."""
 
 
-class TyreQualityController:
+class InferenceController:
     """Resolve uploaded or remote images and delegate inference to Roboflow."""
 
-    def __init__(self, settings: RoboflowSettings, manager: RoboflowManager | None = None) -> None:
+    def __init__(
+        self,
+        settings: RoboflowSettings,
+        model_settings: RoboflowModelSettings,
+        manager: RoboflowManager | None = None,
+    ) -> None:
         self._settings = settings
-        self._manager = manager or RoboflowManager(settings)
+        self._manager = manager or RoboflowManager(
+            api_url=settings.api_url,
+            api_key=settings.api_key,
+            model_settings=model_settings,
+        )
 
     async def detect(
         self,
@@ -39,7 +48,7 @@ class TyreQualityController:
         image: UploadFile | None = None,
         image_url: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Run tyre-quality detection on an uploaded file or a public image URL."""
+        """Run model inference on an uploaded file or a public image URL."""
 
         if image is not None and image_url is not None:
             raise ImageInputError("Provide either an image file or image_url, not both.")
@@ -53,13 +62,13 @@ class TyreQualityController:
             async with self._temporary_image_source(
                 await self._fetch_image_url(normalized_url)
             ) as image_source:
-                return self._manager.infer_tyre_quality(image_source)
+                return self._manager.infer(image_source)
 
         if image is None:
             raise ImageInputError("Either an image file or image_url is required.")
 
         async with self._temporary_image_source(await self._persist_upload(image)) as image_source:
-            return self._manager.infer_tyre_quality(image_source)
+            return self._manager.infer(image_source)
 
     @asynccontextmanager
     async def _temporary_image_source(self, image_source: str) -> AsyncIterator[str]:
@@ -147,3 +156,17 @@ class TyreQualityController:
     def _suffix_from_url(image_url: str) -> str:
         suffix = Path(urlparse(image_url).path).suffix
         return suffix if suffix else ".jpg"
+
+
+class TyreQualityController(InferenceController):
+    """Tyre-quality detection controller."""
+
+    def __init__(self, settings: RoboflowSettings, manager: RoboflowManager | None = None) -> None:
+        super().__init__(settings, settings.tyre_quality, manager)
+
+
+class TreadDepthController(InferenceController):
+    """Tread-depth detection controller."""
+
+    def __init__(self, settings: RoboflowSettings, manager: RoboflowManager | None = None) -> None:
+        super().__init__(settings, settings.tread_depth, manager)
