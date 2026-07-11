@@ -1,9 +1,11 @@
 """Remaining-useful-life (RUL) prediction and maintenance-agent endpoints."""
 
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
+from pydantic import Field
 
 from app.api.errors import ErrorBody, ErrorResponse
 from app.domain.schemas import (
@@ -13,6 +15,7 @@ from app.domain.schemas import (
     FleetAircraftListResponse,
     FleetTiresResponse,
     FleetWorklistResponse,
+    StrictSchema,
     TireRulPredictionRequest,
     TireRulPredictionResponse,
     WheelStatusResponse,
@@ -24,9 +27,13 @@ from app.services.agent_service import (
 )
 from app.services.fleet_tires_service import fleet_tires_service
 from app.services.tire_rul_service import tire_rul_service
+from app.tire_rul.enrich_tire_assets import enrich_tires
 
 # RUL stands for Remaining Useful Life
 router = APIRouter(prefix="/api/v1/tire_rul", tags=["Tire Remaining Useful Life Prediction"])
+
+_ENRICH_LOCK = threading.Lock()
+_DEFAULT_ENRICH_SEED = 20260712
 
 _FLEET_UNAVAILABLE: dict[int | str, dict[str, Any]] = {
     503: {
@@ -34,6 +41,16 @@ _FLEET_UNAVAILABLE: dict[int | str, dict[str, Any]] = {
         "description": "The fleet dataset/AI stack is not available on this deployment.",
     }
 }
+
+
+class EnrichTireAssetsResponse(StrictSchema):
+    """Summary after rewriting tires.parquet scan packs."""
+
+    seed: int
+    current_tires: int = Field(ge=0)
+    status_counts: dict[str, int]
+    model_counts: dict[str, int]
+    group_counts: dict[str, int]
 
 
 def _fleet_unavailable_response(exc: AgentDataUnavailableError) -> JSONResponse:
@@ -190,3 +207,72 @@ def fleet_tires(
         )
         return JSONResponse(status_code=404, content=body.model_dump(exclude_none=True))
     return payload
+
+
+@router.post(
+    "/fleet/enrich-scans",
+    response_model=EnrichTireAssetsResponse,
+    summary="Re-enrich fleet tires with mock-tyre scan packs",
+    description=(
+        "Runs the same job as `python -m app.tire_rul.enrich_tire_assets`: assigns scan "
+        "groups, tread-depth bands, construction types, and 3D crack overlays onto "
+        "tires.parquet. Deterministic for a fixed seed. Concurrent runs are rejected."
+    ),
+    responses={
+        409: {
+            "model": ErrorResponse,
+            "description": "An enrich job is already running.",
+        },
+        **_FLEET_UNAVAILABLE,
+    },
+)
+def enrich_fleet_scans(
+    seed: int = Query(
+        default=_DEFAULT_ENRICH_SEED,
+        ge=0,
+        description="RNG seed for deterministic scan/status assignment.",
+    ),
+) -> EnrichTireAssetsResponse | JSONResponse:
+    if not _ENRICH_LOCK.acquire(blocking=False):
+        payload = ErrorResponse(
+            error=ErrorBody(
+                code="ENRICH_IN_PROGRESS",
+                message="An enrich-scans job is already running.",
+            )
+        )
+        return JSONResponse(status_code=409, content=payload.model_dump(exclude_none=True))
+
+    try:
+        try:
+            tires = enrich_tires(seed=seed)
+        except ImportError:
+            return _fleet_unavailable_response(
+                AgentDataUnavailableError(
+                    "Enriching tire scan packs needs the AI stack (`uv sync --extra ai`)."
+                )
+            )
+        except FileNotFoundError:
+            return _fleet_unavailable_response(
+                AgentDataUnavailableError(
+                    "Fleet dataset not found; run `make data` before enrich-scans."
+                )
+            )
+        except AgentDataUnavailableError as exc:
+            return _fleet_unavailable_response(exc)
+
+        current = tires[tires["is_current"].fillna(False).astype(bool)]
+        return EnrichTireAssetsResponse(
+            seed=seed,
+            current_tires=int(len(current)),
+            status_counts={
+                str(k): int(v) for k, v in current["scan_status"].value_counts().items()
+            },
+            model_counts={
+                str(k): int(v) for k, v in current["model_type"].value_counts().items()
+            },
+            group_counts={
+                str(k): int(v) for k, v in current["scan_group"].value_counts().items()
+            },
+        )
+    finally:
+        _ENRICH_LOCK.release()
