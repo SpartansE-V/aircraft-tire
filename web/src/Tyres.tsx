@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import TireViewer from './TireViewer'
-import { FLEET_TIRES, statusOf, type Status } from './data'
+import { AIRCRAFT, FLEET_TIRES, statusOf, type Status } from './data'
 import {
   DefectsCard, EventsCard, IdentityCard, PressureCard, RunwayCard, TaxiCard, TouchdownCard, TreadCard, UtilizationCard, WeatherCard,
 } from './TireCards'
@@ -49,7 +49,7 @@ export default function Tyres() {
         <div className="flex flex-col gap-3 lg:col-span-3">
           <RemainingLifeCard tire={tire} />
 
-          <TireImageCard tire={tire} />
+          <TireImageCard id={tire.id} aircraftId={AIRCRAFT.reg} label={tire.id} />
 
           <PressureCard tire={tire} />
 

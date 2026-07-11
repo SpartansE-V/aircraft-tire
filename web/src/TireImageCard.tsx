@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { AIRCRAFT, type Tire } from './data'
 import { Card, Open, STATUS } from './ui'
 import { assessTireImage, type TireImageAssessmentResponse } from './uploadApi'
 
-// Upload a photo of the selected tire, screen it with the backend vision model, and show the
-// verdict. Committed results are cached per wheel id so navigating the gear map keeps each tire's
-// last assessment; the in-progress file selection is scoped to the current tire and resets on nav.
-// This is an informational photo screen — it does not mutate the wheel's telemetry-derived status.
+// Upload a photo of the selected wheel, screen it with the backend vision model, and show the
+// verdict. Identity is generic (`id` is the cache key + wire tire_id, `aircraftId` the tail/reg,
+// `label` the human name) so both the Tyres gear map and the RUL worklist can reuse it. Committed
+// results are cached per id so switching wheels keeps each one's last assessment; the in-progress
+// file selection is scoped to the current id and resets on nav. Informational only — it does not
+// mutate the wheel's telemetry-derived status.
 
 const MAX_BYTES = 4 * 1024 * 1024 // matches the backend / AWS direct-upload cap
 const BACKEND_LABEL: Record<string, string> = {
@@ -16,7 +17,7 @@ const BACKEND_LABEL: Record<string, string> = {
   bedrock: 'Claude · Bedrock',
 }
 
-export default function TireImageCard({ tire }: { tire: Tire }) {
+export default function TireImageCard({ id, aircraftId, label }: { id: string; aircraftId: string; label: string }) {
   const [results, setResults] = useState<Record<string, TireImageAssessmentResponse>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [file, setFile] = useState<File | null>(null)
@@ -26,9 +27,9 @@ export default function TireImageCard({ tire }: { tire: Tire }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const previewRef = useRef<string | null>(null)
   // Always the currently-selected wheel, so an upload that resolves after the operator has moved on
-  // touches its own tire's cache only — never the new tire's live selection.
-  const tireIdRef = useRef(tire.id)
-  tireIdRef.current = tire.id
+  // touches its own wheel's cache only — never the new wheel's live selection.
+  const idRef = useRef(id)
+  idRef.current = id
 
   function setPreview(url: string | null) {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current)
@@ -43,40 +44,40 @@ export default function TireImageCard({ tire }: { tire: Tire }) {
     setDragging(false)
     setPreview(null)
     if (inputRef.current) inputRef.current.value = ''
-  }, [tire.id])
+  }, [id])
 
   // Release the last object URL on unmount.
   useEffect(() => () => setPreview(null), [])
 
-  const result = results[tire.id]
-  const error = errors[tire.id]
+  const result = results[id]
+  const error = errors[id]
 
   function pick(f: File | null | undefined) {
     if (!f) return
     if (!f.type.startsWith('image/')) {
-      setErrors((e) => ({ ...e, [tire.id]: 'Choose an image file (JPEG or PNG).' }))
+      setErrors((e) => ({ ...e, [id]: 'Choose an image file (JPEG or PNG).' }))
       return
     }
     if (f.size > MAX_BYTES) {
-      setErrors((e) => ({ ...e, [tire.id]: 'Image exceeds the 4 MB limit — use a smaller photo.' }))
+      setErrors((e) => ({ ...e, [id]: 'Image exceeds the 4 MB limit — use a smaller photo.' }))
       return
     }
-    setErrors((e) => dropKey(e, tire.id))
+    setErrors((e) => dropKey(e, id))
     setFile(f)
     setPreview(URL.createObjectURL(f))
   }
 
   async function submit() {
     if (!file || busy) return
-    const reqId = tire.id // the wheel this upload belongs to, captured before any await
+    const reqId = id // the wheel this upload belongs to, captured before any await
     setBusy(true)
     setErrors((e) => dropKey(e, reqId))
     try {
-      const resp = await assessTireImage(file, { tireId: reqId, aircraftId: AIRCRAFT.reg })
+      const resp = await assessTireImage(file, { tireId: reqId, aircraftId })
       setResults((r) => ({ ...r, [reqId]: resp }))
       // Only clear the live picker if the operator is still on this wheel; otherwise leave the
       // wheel they've since switched to untouched.
-      if (tireIdRef.current === reqId) {
+      if (idRef.current === reqId) {
         setFile(null)
         setPreview(null)
         if (inputRef.current) inputRef.current.value = ''
@@ -84,15 +85,15 @@ export default function TireImageCard({ tire }: { tire: Tire }) {
     } catch (err) {
       setErrors((e) => ({ ...e, [reqId]: (err as Error).message }))
     } finally {
-      if (tireIdRef.current === reqId) setBusy(false)
+      if (idRef.current === reqId) setBusy(false)
     }
   }
 
   function reset() {
     setFile(null)
     setPreview(null)
-    setResults((r) => dropKey(r, tire.id))
-    setErrors((e) => dropKey(e, tire.id))
+    setResults((r) => dropKey(r, id))
+    setErrors((e) => dropKey(e, id))
     if (inputRef.current) inputRef.current.value = ''
   }
 
@@ -107,12 +108,12 @@ export default function TireImageCard({ tire }: { tire: Tire }) {
       />
 
       {busy ? (
-        <Busy previewUrl={previewUrl} tireId={tire.id} />
+        <Busy previewUrl={previewUrl} label={label} />
       ) : result ? (
         <ResultView result={result} onReplace={() => inputRef.current?.click()} onClear={reset} />
       ) : (
         <Picker
-          tireId={tire.id}
+          label={label}
           file={file}
           previewUrl={previewUrl}
           dragging={dragging}
@@ -140,7 +141,7 @@ export default function TireImageCard({ tire }: { tire: Tire }) {
 }
 
 function Picker({
-  tireId,
+  label,
   file,
   previewUrl,
   dragging,
@@ -150,7 +151,7 @@ function Picker({
   onSubmit,
   onClear,
 }: {
-  tireId: string
+  label: string
   file: File | null
   previewUrl: string | null
   dragging: boolean
@@ -168,7 +169,7 @@ function Picker({
           <div className="min-w-0">
             <div className="truncate text-xs text-[var(--ink-2)]">{file.name}</div>
             <div className="text-[10px] uppercase tracking-widest text-[var(--ink-4)]">
-              {(file.size / 1024).toFixed(0)} KB · {tireId}
+              {(file.size / 1024).toFixed(0)} KB · {label}
             </div>
           </div>
         </div>
@@ -207,13 +208,13 @@ function Picker({
       style={{ borderColor: dragging ? 'var(--primary)' : 'var(--line-2)', background: dragging ? 'var(--primary-soft)' : 'transparent' }}
     >
       <span className="text-lg leading-none text-[var(--ink-4)]">⊕</span>
-      <span className="text-xs text-[var(--ink-3)]">Drop a photo of {tireId}, or click to browse</span>
+      <span className="text-xs text-[var(--ink-3)]">Drop a photo of {label}, or click to browse</span>
       <span className="text-[10px] uppercase tracking-widest text-[var(--ink-4)]">JPEG / PNG · ≤ 4 MB</span>
     </button>
   )
 }
 
-function Busy({ previewUrl, tireId }: { previewUrl: string | null; tireId: string }) {
+function Busy({ previewUrl, label }: { previewUrl: string | null; label: string }) {
   return (
     <div className="flex items-center gap-3 border border-[var(--line)] bg-[var(--panel)] p-2">
       {previewUrl && <img src={previewUrl} alt="uploading tire" className="h-16 w-16 shrink-0 object-cover opacity-70" />}
@@ -223,7 +224,7 @@ function Busy({ previewUrl, tireId }: { previewUrl: string | null; tireId: strin
           <Dot delay="160ms" />
           <Dot delay="320ms" />
         </span>
-        Uploading {tireId} &amp; running the vision model…
+        Uploading {label} &amp; running the vision model…
       </div>
     </div>
   )
