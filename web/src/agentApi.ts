@@ -79,7 +79,7 @@ async function readError(res: Response): Promise<string> {
 }
 
 export async function postAgentChat(messages: ChatMessage[], backend: AgentBackend): Promise<AgentChatResponse> {
-  const res = await fetch(`${API_BASE}/api/v1/rul/agent/chat`, {
+  const res = await fetch(`${API_BASE}/api/v1/tire_rul/agent/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages, backend }),
@@ -91,7 +91,7 @@ export async function postAgentChat(messages: ChatMessage[], backend: AgentBacke
 export async function getFleetWorklist(topN = 8, station?: string): Promise<FleetWorklistResponse> {
   const qs = new URLSearchParams({ top_n: String(topN) })
   if (station) qs.set('station', station)
-  const res = await fetch(`${API_BASE}/api/v1/rul/fleet/worklist?${qs.toString()}`)
+  const res = await fetch(`${API_BASE}/api/v1/tire_rul/fleet/worklist?${qs.toString()}`)
   if (!res.ok) throw new ApiError(await readError(res), res.status)
   return (await res.json()) as FleetWorklistResponse
 }
