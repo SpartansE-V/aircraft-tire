@@ -54,6 +54,10 @@ class Settings(BaseSettings):
 
     cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
     port: int = Field(default=8000, ge=1, le=65535, alias="PORT")
+    # Bake mock-tyre scan packs into tires.parquet when the API process starts
+    # (same job as `python -m app.tire_rul.enrich_tire_assets`). Disable in tests.
+    enrich_on_startup: bool = Field(default=True, alias="ENRICH_ON_STARTUP")
+    enrich_seed: int = Field(default=20260712, ge=0, alias="ENRICH_SEED")
     roboflow: RoboflowSettings = Field(default_factory=RoboflowSettings)
 
     @field_validator("cors_origins")

@@ -7,15 +7,22 @@ way — app.tire_rul.scoring is pure numpy.
 
 The full synthetic dataset is generated once per session (in memory, no disk I/O) and reused
 across tests: generation is ~1s, and it exercises the real, committed generator config.
+
+``ENRICH_ON_STARTUP`` is forced off here so the API lifespan does not rewrite
+``app/tire_rul/data/tires.parquet`` under pytest.
 """
 
 import importlib.util
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+
+# Avoid rewriting committed tires.parquet when the ASGI lifespan runs under pytest.
+os.environ.setdefault("ENRICH_ON_STARTUP", "true")
 
 from app.main import app
 from app.tire_rul.config import get_generator_config, get_threshold_config

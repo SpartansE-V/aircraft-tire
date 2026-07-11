@@ -2,7 +2,8 @@
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
@@ -34,10 +35,35 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 RequestHandler = Callable[[Request], Awaitable[Response]]
 
 
+def enrich_tires_on_startup(*, seed: int) -> None:
+    """Run ``enrich_tire_assets`` so fleet /tyres endpoints have scan columns."""
+    from app.tire_rul.enrich_tire_assets import enrich_tires
+
+    enrich_tires(seed=seed)
+    logger.info("Enriched tires.parquet scan packs on startup (seed=%s)", seed)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build and configure the FastAPI application."""
 
     runtime_settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(_application: FastAPI) -> AsyncIterator[None]:
+        if runtime_settings.enrich_on_startup:
+            try:
+                enrich_tires_on_startup(seed=runtime_settings.enrich_seed)
+            except ImportError:
+                logger.warning(
+                    "Skipping tire enrich on startup: AI stack not installed "
+                    "(`uv sync --extra ai`)."
+                )
+            except FileNotFoundError as exc:
+                logger.warning("Skipping tire enrich on startup: %s", exc)
+            except Exception:
+                logger.exception("Tire enrich on startup failed")
+        yield
+
     application = FastAPI(
         title=SERVICE_NAME,
         version=SERVICE_VERSION,
@@ -49,6 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         docs_url="/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     install_error_handlers(application)
