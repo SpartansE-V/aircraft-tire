@@ -14,8 +14,9 @@ import type { Theme } from './ui'
 // pivots. Nothing about the airframe is authored here; the only thing we add is the tire mapping.
 
 const STATUS_HUE = { ok: HUE.ok, watch: HUE.warn, action: HUE.crit }
+const ZERO = new THREE.Vector3()
 
-export type CamPreset = 'chase' | 'side' | 'gear'
+export type CamPreset = 'field' | 'chase' | 'side' | 'gear'
 
 /**
  * Camera presets, derived from the airframe once it has loaded rather than hard-coded in metres —
@@ -24,6 +25,9 @@ export type CamPreset = 'chase' | 'side' | 'gear'
  */
 function camPresets(len: number, bogie: THREE.Vector3): Record<CamPreset, [THREE.Vector3, THREE.Vector3]> {
   return {
+    // FIELD is replaced per-airport by buildAirport, which knows the real extents. This is only the
+    // placeholder for the moment before the first airport exists.
+    field: [new THREE.Vector3(-1600, 1500, 2100), new THREE.Vector3(900, 0, 0)],
     chase: [new THREE.Vector3(-len * 1.5, len * 0.38, len * 0.85), new THREE.Vector3(-len * 0.1, len * 0.06, 0)],
     side: [new THREE.Vector3(0, len * 0.14, len * 1.75), new THREE.Vector3(0, len * 0.07, 0)],
     // Aft-outboard of the left bogie: the wheels are the subject, the airframe is the backdrop.
@@ -124,7 +128,7 @@ export default function Aircraft({
     // near = 3, not 0.1. Depth precision is spent almost entirely on the near plane, and at 0.1 there
     // was none left at runway distance — the runway and the ground fought over it and the surface
     // crawled while you orbited. OrbitControls' minDistance is 5, so nothing ever gets closer anyway.
-    const camera = new THREE.PerspectiveCamera(38, 1, 3, 6000)
+    const camera = new THREE.PerspectiveCamera(38, 1, 3, 30000)
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
     renderer.domElement.style.display = 'block'
@@ -134,7 +138,7 @@ export default function Aircraft({
     controls.enableDamping = true
     controls.maxPolarAngle = Math.PI / 2 - 0.02 // never orbit under the runway
     controls.minDistance = 5
-    controls.maxDistance = 260
+    controls.maxDistance = 6000 // buildAirport raises this to fit whichever aerodrome is loaded
 
     const hemi = new THREE.HemisphereLight(0xdfe8f0, 0x2a3038, 1.9)
     scene.add(hemi)
@@ -148,12 +152,12 @@ export default function Aircraft({
     skyCanvas.height = 256
     const skyTex = new THREE.CanvasTexture(skyCanvas)
     const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(3000, 32, 20),
+      new THREE.SphereGeometry(12000, 32, 20),
       new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false, depthWrite: false }),
     )
     scene.add(sky)
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), new THREE.MeshStandardMaterial({ roughness: 1 }))
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), new THREE.MeshStandardMaterial({ roughness: 1 }))
     ground.rotation.x = -Math.PI / 2
     ground.position.y = -0.35 // a real runway sits proud of the dirt; this also keeps them apart in z
     scene.add(ground)
@@ -170,11 +174,16 @@ export default function Aircraft({
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
     })
+    let fogBase: [number, number] = [400, 3000] // the env's ground-level haze, before the zoom stretch
     const apron = new THREE.Group() // holds every runway; rebuilt when the track changes
     scene.add(apron)
 
     const buildAirport = (tk: Track) => {
+      // Group.clear() only detaches — it frees nothing. Each strip owns a geometry, so rebuilding on
+      // every track switch without disposing leaks one per runway, for the life of the page.
+      for (const child of apron.children) (child as THREE.Mesh).geometry.dispose()
       apron.clear()
+
       const a = active(tk)
       const h = (a.headingDeg * Math.PI) / 180
       // Airport frame (east, north) -> world (along-runway, lateral), with the threshold at the origin.
@@ -187,24 +196,44 @@ export default function Aircraft({
         }
       }
 
-      for (const r of a.airport.runways) {
+      const bounds = new THREE.Box3()
+      a.airport.runways.forEach((r, i) => {
         const le = toWorld(r.leE, r.leN)
         const he = toWorld(r.heE, r.heN)
+        bounds.expandByPoint(new THREE.Vector3(le.x, 0, le.z))
+        bounds.expandByPoint(new THREE.Vector3(he.x, 0, he.z))
         const mid = { x: (le.x + he.x) / 2, z: (le.z + he.z) / 2 }
-        // Each strip owns its material, because the texture repeat has to follow its own length —
-        // share one and the markings stretch on the long runways.
-        const mat = runwayMat.clone()
-        mat.map = runwayMat.map!.clone()
-        mat.map.repeat.set(r.lengthM / 50, 1)
-        mat.map.needsUpdate = true
 
-        const strip = new THREE.Mesh(new THREE.PlaneGeometry(r.lengthM, r.widthM), mat)
+        const geo = new THREE.PlaneGeometry(r.lengthM, r.widthM)
+        // Tile the markings along the strip by scaling its UVs, not by cloning the texture per runway.
+        // One shared texture and one shared material for the whole airport; only geometry is per-strip.
+        const uv = geo.attributes.uv as THREE.BufferAttribute
+        for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * (r.lengthM / 50))
+        uv.needsUpdate = true
+
+        const strip = new THREE.Mesh(geo, runwayMat)
         strip.rotation.x = -Math.PI / 2
         // Turn each strip to its own bearing, relative to the one we are landing on.
         strip.rotation.z = -Math.atan2(he.z - le.z, he.x - le.x)
-        strip.position.set(mid.x, 0, mid.z)
+        // Runways cross. Coplanar tarmac z-fights where they overlap (JFK's 13R/31L over the 04s), so
+        // give every strip its own height — a few centimetres, invisible at any real viewing distance
+        // but far more than the depth buffer can confuse — with the one being landed on on top.
+        const isActive = r.le === tk.rwy || r.he === tk.rwy
+        strip.position.set(mid.x, isActive ? 0.15 : 0.02 + i * 0.02, mid.z)
         apron.add(strip)
-      }
+      })
+
+      // Frame the whole aerodrome from its real extents, so every airport is legible whatever its
+      // shape — JFK's crossing pair and Denver's six parallels need very different framing.
+      const centre = bounds.getCenter(new THREE.Vector3())
+      const span = Math.max(bounds.getSize(new THREE.Vector3()).x, bounds.getSize(new THREE.Vector3()).z, 2000)
+      // Stand off far enough that the whole span fits the 38° vertical FOV: half a span needs
+      // ~1.45 spans of distance, and these offsets give ~1.6. Closer, and the field gets cropped.
+      const eye = new THREE.Vector3(-span * 0.8, span * 1.1, span * 0.8)
+      CAM.field = [centre.clone().add(eye), centre]
+      // The zoom cap has to clear that, or OrbitControls quietly hauls the camera back in and the
+      // field view is a crop no matter what the preset asks for. JFK spans 5.2 km and needs 8.2.
+      controls.maxDistance = Math.max(600, eye.length() * 1.3)
     }
 
     const plane = new THREE.Group()
@@ -253,6 +282,9 @@ export default function Aircraft({
       model.rotation.y = Math.PI / 2 // model is +z forward; our world is +x forward
       plane.add(model)
 
+      // `local` is what everything downstream uses (pips, the selection ring, the tire-clearance
+      // raise): world positions carry wherever the aircraft currently is on the approach, which is
+      // not a property of the airframe.
       wheels = mapWheels(model).map((w) => ({ ...w, local: plane.worldToLocal(w.c.clone()) }))
       pickable = wheels.map((w) => w.mesh)
       for (const w of wheels) {
@@ -268,9 +300,14 @@ export default function Aircraft({
       // Frame the camera off the real airframe, not off guessed metres.
       const box = new THREE.Box3().setFromObject(model)
       const len = box.getSize(new THREE.Vector3()).x
+      // Aircraft-LOCAL, not world: moveCam adds the follow offset itself. Feeding it a world bogie
+      // (which carries the aircraft's position on final) applied that offset twice and flung the
+      // camera to double the distance, staring at empty grass.
       const lefts = wheels.filter((w) => w.id.startsWith('L'))
-      const bogie = lefts.reduce((a, w) => a.add(w.c), new THREE.Vector3()).divideScalar(lefts.length || 1)
-      CAM = camPresets(len, bogie)
+      const bogie = lefts.reduce((a, w) => a.add(w.local), new THREE.Vector3()).divideScalar(lefts.length || 1)
+      // Keep the field framing: it belongs to the airport, not the airframe, and buildAirport already
+      // worked it out from the real runway extents.
+      CAM = { ...camPresets(len, bogie), field: CAM.field }
       moveCam(camRef.current)
       applyAttitude(currentAttitude)
 
@@ -300,6 +337,7 @@ export default function Aircraft({
       skyTex.needsUpdate = true
 
       scene.fog = new THREE.Fog(shade(e.skyBottom).getHex(), e.fog[0], e.fog[1])
+      fogBase = e.fog
       ;(ground.material as THREE.MeshStandardMaterial).color.copy(shade(e.ground))
 
       // Swing the sun around with the runway heading, so no two airports are lit the same way.
@@ -317,11 +355,8 @@ export default function Aircraft({
         wet: { color: 0x7d848b, roughness: 0.28 }, // low roughness = the sheen that says "wet"
         contaminated: { color: 0xd9dee2, roughness: 0.99 },
       }[tk.surface]
-      for (const strip of apron.children) {
-        const rm = (strip as THREE.Mesh).material as THREE.MeshStandardMaterial
-        rm.color.copy(shade(look.color))
-        rm.roughness = look.roughness
-      }
+      runwayMat.color.copy(shade(look.color)) // one material for the whole airport
+      runwayMat.roughness = look.roughness
     }
 
     // Rebuilding the airport is cheap but not free, and the theme toggle must not trigger it.
@@ -347,30 +382,30 @@ export default function Aircraft({
       plane.rotation.set(pose.rollDeg * d, pose.crabDeg * d, pose.pitchDeg * d) // x=roll, y=crab, z=pitch
       plane.position.x = pose.xM
       plane.position.z = pose.zM
-      const dx = pose.xM - cameraFollow.x
-      const dz = pose.zM - cameraFollow.z
-      if (dx || dz) {
-        camera.position.x += dx
-        camera.position.z += dz
-        controls.target.x += dx
-        controls.target.z += dz
-        cameraFollow.set(pose.xM, 0, pose.zM)
-        controls.update()
-      }
 
       if (!wheels.length) {
         plane.position.y = pose.yM
-        return
+      } else {
+        // Bank lowers the down-wing tires. Raise the aircraft by the exact amount needed so the lowest
+        // tire stays on top of the runway instead of clipping through it.
+        let lowestTire = Infinity
+        for (const w of wheels) {
+          const bottomY = wheelPos.copy(w.local).applyEuler(plane.rotation).y - w.r
+          lowestTire = Math.min(lowestTire, bottomY)
+        }
+        plane.position.y = pose.yM + Math.max(0, -lowestTire)
       }
 
-      // Bank lowers the down-wing tires. Raise the aircraft by the exact amount needed so the lowest
-      // tire stays on top of the runway instead of clipping through it.
-      let lowestTire = Infinity
-      for (const w of wheels) {
-        const bottomY = wheelPos.copy(w.local).applyEuler(plane.rotation).y - w.r
-        lowestTire = Math.min(lowestTire, bottomY)
+      // Follow the aircraft in all three axes, not just along the runway. On short final it is a few
+      // hundred metres out AND tens of metres up; tracking only x/z left the camera staring at the
+      // grass under the approach path while the aircraft flew overhead, out of frame.
+      const delta = plane.position.clone().sub(cameraFollow)
+      if (delta.lengthSq() > 0) {
+        camera.position.add(delta)
+        controls.target.add(delta)
+        cameraFollow.copy(plane.position)
+        controls.update()
       }
-      plane.position.y = pose.yM + Math.max(0, -lowestTire)
     }
     const applyAttitude = (a: Attitude) => applyPose(a, currentFrame)
     const applyFrame = (f: LandingFrame | undefined) => applyPose(currentAttitude, f)
@@ -379,8 +414,11 @@ export default function Aircraft({
     let CAM = camPresets(70, new THREE.Vector3(-2, 1, -5))
     const moveCam = (p: CamPreset) => {
       const [pos, tgt] = CAM[p]
-      camera.position.copy(pos).add(cameraFollow)
-      controls.target.copy(tgt).add(cameraFollow)
+      // Every preset but FIELD is defined relative to the aircraft, so it rides along with it. FIELD
+      // frames the aerodrome itself and stays put.
+      const follow = p === 'field' ? ZERO : cameraFollow
+      camera.position.copy(pos).add(follow)
+      controls.target.copy(tgt).add(follow)
       controls.update()
     }
 
@@ -418,6 +456,13 @@ export default function Aircraft({
 
     let raf = requestAnimationFrame(function tick() {
       controls.update()
+      // Haze tuned for a wheel 15 m away is a wall of grey from 2 km up. Push the fog out with the
+      // camera so close-ups keep their atmosphere and the field view can actually see the field.
+      if (scene.fog instanceof THREE.Fog) {
+        const d = camera.position.distanceTo(controls.target)
+        scene.fog.near = fogBase[0]
+        scene.fog.far = Math.max(fogBase[1], d * 3)
+      }
       if (ring.visible) {
         const w = wheels.find((x) => x.id === selectedRef.current)
         if (w) ring.scale.setScalar(w.r * (1.3 + Math.sin(Date.now() / 320) * 0.07)) // pulse, so it reads at 12 px
@@ -479,7 +524,7 @@ export default function Aircraft({
       )}
 
       <div className="absolute right-2 top-2 flex gap-1">
-        {(['chase', 'side', 'gear'] as CamPreset[]).map((p) => (
+        {(['field', 'chase', 'side', 'gear'] as CamPreset[]).map((p) => (
           <button
             key={p}
             onClick={() => setCam(p)}
