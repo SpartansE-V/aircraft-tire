@@ -34,7 +34,7 @@ function landingAt(track: Track, base?: Partial<Landing>): Landing {
   }
 }
 
-const LEVEL: Attitude = { pitchDeg: 4, rollDeg: 0, crabDeg: 0 }
+const LEVEL: Attitude = { pitchDeg: 4, rollDeg: 0, crabDeg: 0, liftShare: 0.18 }
 
 export default function SimulateLanding() {
   const [theme, setTheme] = useTheme()
@@ -138,6 +138,7 @@ export default function SimulateLanding() {
               <Slider label="Pitch / flare" v={att.pitchDeg} min={-2} max={12} step={0.5} unit="°" onChange={(v) => setA('pitchDeg', v)} bad={att.pitchDeg > 11} />
               <Slider label="Roll / bank" v={att.rollDeg} min={-8} max={8} step={0.5} unit="°" onChange={(v) => setA('rollDeg', v)} bad={Math.abs(att.rollDeg) > 5} />
               <Slider label="Yaw / crab" v={att.crabDeg} min={-15} max={15} step={1} unit="°" onChange={(v) => setA('crabDeg', v)} bad={Math.abs(att.crabDeg) > 10} />
+              <Slider label="Lift remaining" v={Math.round(att.liftShare * 100)} min={0} max={80} step={5} unit=" %" onChange={(v) => setA('liftShare', v / 100)} bad={att.liftShare > 0.5} />
             </div>
             <button
               onClick={() => setAtt(LEVEL)}
