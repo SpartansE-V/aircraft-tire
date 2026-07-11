@@ -171,6 +171,18 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "arn:aws:iam::*:role/${var.project_name}-ecs-task-role",
     ]
   }
+
+  # The uploads bucket this stack owns (name is derived from project_name +
+  # account id in modules/uploads), scoped by name prefix rather than "*".
+  statement {
+    sid     = "ManageUploadsBucket"
+    effect  = "Allow"
+    actions = ["s3:*"]
+    resources = [
+      "arn:aws:s3:::${var.project_name}-uploads-*",
+      "arn:aws:s3:::${var.project_name}-uploads-*/*",
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions_deploy" {

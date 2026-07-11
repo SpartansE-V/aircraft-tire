@@ -15,6 +15,10 @@ output "ecs_service_name" {
   value = module.ecs.service_name
 }
 
+output "uploads_bucket_name" {
+  value = module.uploads.bucket_name
+}
+
 output "github_actions_role_arn" {
   description = "Role ARN GitHub Actions assumes via OIDC. Set as the AWS_ROLE_ARN repo secret."
   value       = module.github_oidc.role_arn

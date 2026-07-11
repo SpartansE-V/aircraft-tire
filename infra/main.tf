@@ -56,6 +56,37 @@ module "ecs" {
   depends_on = [module.alb]
 }
 
+module "uploads" {
+  source = "./modules/uploads"
+
+  project_name         = var.project_name
+  cors_allowed_origins = split(",", var.cors_origins)
+  tags                 = local.tags
+}
+
+resource "aws_iam_role_policy" "task_uploads_access" {
+  name = "${var.project_name}-uploads-access"
+  role = module.ecs.task_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "ListUploadsBucket"
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = module.uploads.bucket_arn
+      },
+      {
+        Sid      = "ReadWriteUploadObjects"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Resource = "${module.uploads.bucket_arn}/*"
+      }
+    ]
+  })
+}
+
 module "github_oidc" {
   source = "./modules/github_oidc"
 
