@@ -1,0 +1,16 @@
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+workspace/
+flagged/
+.gradio/
+.env
+.env.*
+!.env.example
+.DS_Store
+tests/

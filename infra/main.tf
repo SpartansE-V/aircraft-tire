@@ -8,6 +8,16 @@ locals {
   tfstate_key_prefix = "aircraft-tire"
   tfstate_lock_table = "aircraft-tire-tfstate-lock"
 
+  app_environment = [
+    { name = "PORT", value = "8000" },
+    { name = "CORS_ORIGINS", value = var.cors_origins },
+  ]
+
+  app_service_environment = var.openai_api_key != "" ? concat(
+    local.app_environment,
+    [{ name = "OPENAI_API_KEY", value = var.openai_api_key }]
+  ) : local.app_environment
+
   # One entry per deployable container (its own Dockerfile), sharing the
   # VPC and ECS cluster below but each getting its own ECR repo, ALB, and
   # ECS service so app/ and 3d-reconstructor/ deploy independently.
@@ -24,10 +34,7 @@ locals {
       launch_type        = "FARGATE"
       gpu_count          = 0
       enable_autoscaling = true
-      environment = [
-        { name = "PORT", value = "8000" },
-        { name = "CORS_ORIGINS", value = var.cors_origins },
-      ]
+      environment        = local.app_service_environment
     }
     reconstructor = {
       name           = "${var.project_name}-3d-reconstructor"

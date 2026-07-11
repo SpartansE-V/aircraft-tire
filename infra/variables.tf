@@ -39,6 +39,13 @@ variable "upload_presigned_url_expiration_secs" {
   }
 }
 
+variable "openai_api_key" {
+  description = "OpenAI API key provided by GitHub Actions when deploying the app service."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "image_tag_app" {
   description = "Image tag to deploy for the app service. CI overrides this per build (commit SHA)."
   type        = string
