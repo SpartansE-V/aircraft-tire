@@ -1,8 +1,10 @@
 """Internal physics-informed wear-severity calculation."""
 
+from dataclasses import dataclass
 from uuid import uuid4
 
 from app.domain.schemas import (
+    GearValue,
     PressureEffect,
     Recommendation,
     SeverityLevel,
@@ -11,6 +13,15 @@ from app.domain.schemas import (
     WearSeverityResponse,
 )
 from app.services import model_config
+
+
+@dataclass(frozen=True)
+class RawWearResult:
+    """Full-precision internal values shared by calculator services."""
+
+    severity: float
+    wear_rate_mm_per_cycle: float
+    pressure_multiplier: float
 
 
 def classify_severity(severity_index: int) -> SeverityLevel:
@@ -28,27 +39,35 @@ def classify_severity(severity_index: int) -> SeverityLevel:
 class WearCalculator:
     """Calculate a stateless tire wear-severity estimate."""
 
-    def calculate(self, request: WearSeverityRequest) -> WearSeverityResponse:
+    def calculate_raw_values(
+        self,
+        *,
+        gear: GearValue,
+        touchdown_speed_ms: float,
+        landing_weight_kg: float,
+        crosswind_kt: float,
+        taxi_distance_km: float,
+        outside_air_temperature_c: float,
+        under_inflation_pct: float,
+    ) -> RawWearResult:
         spin_energy = (
-            request.touchdown_speed_ms / model_config.REFERENCE_TOUCHDOWN_SPEED_MS
+            touchdown_speed_ms / model_config.REFERENCE_TOUCHDOWN_SPEED_MS
         ) ** model_config.SPIN_EXPONENT
-        brake_energy = (
-            request.landing_weight_kg / model_config.REFERENCE_LANDING_WEIGHT_KG
-        ) * spin_energy
+        brake_energy = (landing_weight_kg / model_config.REFERENCE_LANDING_WEIGHT_KG) * spin_energy
         lateral_work = (
             model_config.UNIT_MULTIPLIER
-            + model_config.CROSSWIND_FACTOR * request.crosswind_kt
+            + model_config.CROSSWIND_FACTOR * crosswind_kt
             + model_config.TAXI_DISTANCE_FACTOR
             * (
-                request.taxi_distance_km / model_config.REFERENCE_TAXI_DISTANCE_KM
+                taxi_distance_km / model_config.REFERENCE_TAXI_DISTANCE_KM
                 - model_config.UNIT_MULTIPLIER
             )
         )
         temperature_multiplier = model_config.UNIT_MULTIPLIER + model_config.TEMPERATURE_FACTOR * (
-            request.outside_air_temperature_c - model_config.REFERENCE_TEMPERATURE_C
+            outside_air_temperature_c - model_config.REFERENCE_TEMPERATURE_C
         )
         pressure_multiplier = model_config.PRESSURE_BASE ** (
-            request.under_inflation_pct / model_config.REFERENCE_PRESSURE_DELTA_PCT
+            under_inflation_pct / model_config.REFERENCE_PRESSURE_DELTA_PCT
         )
         operational_severity = (
             model_config.SPIN_WEIGHT * spin_energy
@@ -60,12 +79,34 @@ class WearCalculator:
             operational_severity * temperature_multiplier * pressure_multiplier,
         )
 
-        gear_configuration = model_config.GEAR_CONFIGURATIONS[request.gear]
+        gear_configuration = model_config.GEAR_CONFIGURATIONS[gear]
         wear_rate = gear_configuration.base_wear_rate * severity
-        estimated_tread_life_cycles = round(
-            (model_config.INITIAL_TREAD_DEPTH_MM - model_config.MINIMUM_TREAD_DEPTH_MM) / wear_rate
+
+        return RawWearResult(
+            severity=severity,
+            wear_rate_mm_per_cycle=wear_rate,
+            pressure_multiplier=pressure_multiplier,
         )
-        severity_index = round(severity * model_config.SEVERITY_INDEX_SCALE)
+
+    def calculate_raw(self, request: WearSeverityRequest) -> RawWearResult:
+        return self.calculate_raw_values(
+            gear=request.gear,
+            touchdown_speed_ms=request.touchdown_speed_ms,
+            landing_weight_kg=request.landing_weight_kg,
+            crosswind_kt=request.crosswind_kt,
+            taxi_distance_km=request.taxi_distance_km,
+            outside_air_temperature_c=request.outside_air_temperature_c,
+            under_inflation_pct=request.under_inflation_pct,
+        )
+
+    def calculate(self, request: WearSeverityRequest) -> WearSeverityResponse:
+        raw_result = self.calculate_raw(request)
+        gear_configuration = model_config.GEAR_CONFIGURATIONS[request.gear]
+        estimated_tread_life_cycles = round(
+            (model_config.INITIAL_TREAD_DEPTH_MM - model_config.MINIMUM_TREAD_DEPTH_MM)
+            / raw_result.wear_rate_mm_per_cycle
+        )
+        severity_index = round(raw_result.severity * model_config.SEVERITY_INDEX_SCALE)
         severity_level = classify_severity(severity_index)
         severity_configuration = model_config.SEVERITY_CONFIGURATIONS[severity_level]
         pressure_warning = (
@@ -82,12 +123,12 @@ class WearCalculator:
                 label=severity_configuration.label,
             ),
             estimated_wear_rate_mm_per_cycle=round(
-                wear_rate, model_config.WEAR_RATE_OUTPUT_DECIMALS
+                raw_result.wear_rate_mm_per_cycle, model_config.WEAR_RATE_OUTPUT_DECIMALS
             ),
             estimated_total_tread_life_cycles=estimated_tread_life_cycles,
             pressure_effect=PressureEffect(
                 multiplier=round(
-                    pressure_multiplier,
+                    raw_result.pressure_multiplier,
                     model_config.PRESSURE_MULTIPLIER_OUTPUT_DECIMALS,
                 ),
                 warning=pressure_warning,

@@ -10,7 +10,7 @@ async def test_root(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {
-        "service": "Aircraft Tire Wear Severity Calculator",
+        "service": "Aircraft Tire Assessment API",
         "version": "1.0.0",
         "status": "available",
         "documentation": "/docs",
