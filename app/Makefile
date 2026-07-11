@@ -37,8 +37,10 @@ train:
 	uv run python -m app.tire_rul.train
 
 # --- Quality gates ---
+# The suite lives at <repo>/tests (rootdir is the repo root, per ../pytest.ini). Point pytest
+# at it explicitly: `testpaths` only kicks in when cwd == rootdir, and we run from app/.
 test:
-	uv run pytest -q
+	uv run pytest -q ../tests
 
 lint:
 	uv run ruff check .
