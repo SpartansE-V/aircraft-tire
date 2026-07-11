@@ -14,6 +14,7 @@ on:
       - ".dockerignore"
       - "3d-reconstructor/**"
       - "web/**"
+      - ".github/workflows/**"
   workflow_dispatch: {}
 
 # Shares a concurrency group with infra.yml - both run `terraform apply`
@@ -80,6 +81,7 @@ jobs:
               - '.dockerignore'
             reconstructor:
               - '3d-reconstructor/**'
+              - '.github/workflows/**'
             web:
               - 'web/**'
 
@@ -185,6 +187,16 @@ jobs:
     if: needs.changes.outputs.reconstructor == 'true'
     runs-on: ubuntu-latest
     steps:
+      # The MASt3R image is large (CUDA base + baked checkpoint). Reclaim the
+      # ~25-40 GB of preinstalled tooling so the build AND `terraform init`
+      # (AWS provider) fit in the runner's ~14 GB free root disk.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
+                      /opt/hostedtoolcache/CodeQL "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+          sudo docker image prune -af || true
+          df -h /
+
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
@@ -203,6 +215,12 @@ jobs:
         run: |
           docker build -t "$REGISTRY/aircraft-tire-3d-reconstructor:${{ github.sha }}" 3d-reconstructor
           docker push "$REGISTRY/aircraft-tire-3d-reconstructor:${{ github.sha }}"
+
+      - name: Reclaim build space before Terraform
+        run: |
+          docker image prune -af || true
+          docker builder prune -af || true
+          df -h /
 
       - uses: hashicorp/setup-terraform@v3
         with:
