@@ -3,6 +3,7 @@ import { Card, Header, useTheme } from '../ui'
 import type { Status } from '../data'
 import { useWheelStatus, useWorklist, type WheelPosition } from './api'
 import { WheelDetail, WheelRulMap, WorklistTable, type WheelCell } from './RulCards'
+import PlanForecast from './PlanForecast'
 import { fmtDate } from './positions'
 
 const STATIONS = ['SGN', 'DAD', 'HAN'] as const
@@ -113,8 +114,13 @@ export default function Rul() {
         </div>
       </div>
 
+      {/* full-width: manual planning forecast — type in readings and run /predict */}
+      <div className="mt-3">
+        <PlanForecast />
+      </div>
+
       <footer className="mt-4 flex flex-wrap justify-between gap-2 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">
-        <span>Live · /api/v1/rul · fleet worklist + per-wheel status</span>
+        <span>Live · /api/v1/rul · fleet worklist + per-wheel status + planner</span>
         <span>Decision-support only — not an approval for service</span>
       </footer>
     </div>
