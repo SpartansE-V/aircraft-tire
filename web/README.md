@@ -39,7 +39,7 @@ absolute origin at build time. When the fleet dataset is absent the backend retu
 ## Engineer Chat (maintenance agent)
 
 The **Engineer Chat** tab (`/engineer-chat`) is a chat UI for the backend Maintenance Decision
-Agent. It talks to the FastAPI service (`app/api/routes/rul.py`):
+Agent. It talks to the FastAPI service (`app/api/routes/tire_rul.py`):
 
 - `POST /api/v1/tire_rul/agent/chat` — multi-turn agent chat (Markdown answer + tool-call trace)
 - `GET /api/v1/tire_rul/fleet/worklist` — the live "Fleet priority" rail
