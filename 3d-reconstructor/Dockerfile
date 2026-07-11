@@ -1,6 +1,9 @@
-# MASt3R reconstruction service — GPU image.
-# MASt3R runs on CPU too (no CUDA), but is much slower; deploy on a CUDA GPU host.
-FROM pytorch/pytorch:2.1.2-cuda11.8-cudnn8-runtime
+# MASt3R reconstruction service — CPU image.
+# The deploy target is ECS Fargate (no GPU), so we use CPU-only torch. This keeps
+# the image ~4-5 GB (vs ~12 GB for the CUDA base), so Fargate can pull it within
+# its ephemeral storage and the CI build fits the runner disk. MASt3R runs on CPU
+# via device=auto; deploy on a CUDA GPU host only if you switch to a CUDA torch base.
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -13,25 +16,27 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MAST3R_DEVICE=auto \
     HF_HOME=/opt/hf-cache
 
-# System libs: git (clone), wget (checkpoint), libgl/glib (opencv/trimesh).
+# git/wget for the repo + checkpoint; libgl/glib for opencv/trimesh; build tools
+# in case a dependency lacks a wheel.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        git wget ca-certificates libgl1 libglib2.0-0 && \
+        git wget ca-certificates libgl1 libglib2.0-0 build-essential && \
     rm -rf /var/lib/apt/lists/*
 
-# Clone MASt3R with DUSt3R + CroCo submodules.
-RUN git clone --recursive https://github.com/naver/mast3r.git ${MAST3R_HOME}
-
-# Python deps. Torch/torchvision already ship in the base image; the repo
-# requirements add roma, opencv, scipy, einops, trimesh, huggingface-hub, etc.
-# CroCo's optional CUDA RoPE kernels are NOT compiled — MASt3R falls back to a
-# pure-pytorch RoPE, which is correct (just a little slower).
+# CPU-only torch (small) BEFORE the repo requirements so their unpinned `torch`
+# stays satisfied by this CPU build. The extra-index keeps torch CPU if touched.
 RUN pip install --upgrade pip && \
-    pip install -r ${MAST3R_HOME}/dust3r/requirements.txt && \
-    pip install -r ${MAST3R_HOME}/requirements.txt && \
-    pip install pillow-heif
+    pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
 
-# Pre-download the metric checkpoint so first inference is fast / offline-capable.
+# Clone MASt3R with DUSt3R + CroCo submodules and install their deps.
+# CroCo's optional CUDA RoPE kernels are NOT compiled — pure-pytorch RoPE fallback.
+RUN git clone --recursive https://github.com/naver/mast3r.git ${MAST3R_HOME} && \
+    pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r ${MAST3R_HOME}/dust3r/requirements.txt \
+        -r ${MAST3R_HOME}/requirements.txt \
+        pillow-heif
+
+# Pre-download the metric checkpoint (baked in -> fast, offline Fargate cold starts).
 RUN mkdir -p ${MAST3R_HOME}/checkpoints && \
     wget -q https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth \
       -O ${MAST3R_HOME}/checkpoints/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth
