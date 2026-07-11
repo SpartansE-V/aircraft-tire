@@ -63,7 +63,7 @@ locals {
       task_memory        = 512
       desired_count      = 2
       image_tag          = var.image_tag_web
-      environment        = [] # Static build; no runtime config needed.
+      environment        = [] # API_URL will be set dynamically after app ALB is created
       health_check_path  = "/health"
       launch_type        = "FARGATE"
       gpu_count          = 0
@@ -130,7 +130,10 @@ module "ecs" {
   task_cpu               = each.value.task_cpu
   task_memory            = each.value.task_memory
   desired_count          = each.value.desired_count
-  environment            = each.value.environment
+  # Inject app ALB URL into web service environment
+  environment = each.key == "web" ? [
+    { name = "API_URL", value = "http://${module.alb["app"].dns_name}" }
+  ] : each.value.environment
   launch_type            = each.value.launch_type
   gpu_count              = each.value.gpu_count
   enable_autoscaling     = each.value.enable_autoscaling
