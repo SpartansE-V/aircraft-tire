@@ -18,6 +18,12 @@ export type InspectionReading = {
   measured_groove_mm: number
 }
 
+export type WheelCell = {
+  status: RulStatus | null
+  loading: boolean
+  error: ApiError | null
+}
+
 export type FlightConditions = {
   landing_load_factor: number
   braking_energy_factor: number
