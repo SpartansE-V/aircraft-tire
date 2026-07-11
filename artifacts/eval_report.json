@@ -1,0 +1,53 @@
+{
+  "config_version": "1.0",
+  "seed": 20240117,
+  "n_tires": 1068,
+  "n_train_tires": 770,
+  "n_test_tires": 257,
+  "outcome_mix": {
+    "worn": 0.643,
+    "early_removal": 0.188,
+    "in_service": 0.169
+  },
+  "degradation_model": {
+    "n_test_worn_tires": 169,
+    "n_eval_points": 1991,
+    "rul_mae_cycles": 17.645958007333284,
+    "rul_mae_cycles_second_half": 7.963685318646883,
+    "rul_mae_pct_of_life": 0.17681141147117393,
+    "wear_to_limit_date_mae_days_at_30d": 3.78484521941647,
+    "alpha_lambda_accuracy_second_half": 0.7142857142857143,
+    "prognostic_horizon_cycles": 42.97041420118343,
+    "asymmetric_score_second_half": 3.5449457533549795,
+    "frac_late": 0.5017579105976896,
+    "frac_late_second_half": 0.5150631681243926,
+    "ground_truth_wear_rate_recovery_median_abs_pct": 0.02146342868983091
+  },
+  "weibull_median_life_cycles": {
+    "main": 293.6810295626465,
+    "nose": 160.02314034864565
+  },
+  "lightgbm_baseline_rul_mae_cycles": 15.519200821100384,
+  "top_features_shap": [
+    {
+      "feature": "groove_remaining_ratio",
+      "mean_abs_shap": 77.67009206967577
+    },
+    {
+      "feature": "cycles_since_install",
+      "mean_abs_shap": 21.19914179978947
+    },
+    {
+      "feature": "lateral_exposure",
+      "mean_abs_shap": 18.521468218514407
+    },
+    {
+      "feature": "recent_wear_rate",
+      "mean_abs_shap": 5.033041838059053
+    },
+    {
+      "feature": "rolling_wear_slope",
+      "mean_abs_shap": 2.662974812927104
+    }
+  ]
+}

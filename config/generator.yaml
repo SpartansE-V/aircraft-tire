@@ -1,0 +1,84 @@
+# TreadCast synthetic-data generator config.
+# Every safety-relevant parameter is anchored to published aviation-tire ranges.
+# Changing `seed` is the only edit needed to alter the scenario; leaving it fixed
+# reproduces the exact demo story.
+version: "1.0"
+seed: 20240117
+
+fleet:
+  sim_start_date: "2024-01-01"   # simulated history begins here
+  history_months: 12             # 12 months of operations -> as_of = 2025-01-01
+  n_aircraft: 30
+  aircraft_type: "a320_family"
+  cycles_per_day: [2.2, 4.0]     # narrowbody short-haul utilization spread (takeoff/landing cycles/day)
+
+tire:
+  tire_size: "H46x18.0R20"       # representative narrowbody main-gear radial
+  brands: ["Michelin", "Bridgestone", "Goodyear"]
+  new_tread_mm: [11.0, 14.0]     # new molded tread depth (Goodyear/Bridgestone care manuals)
+  wear_limit_mm: 2.0             # serviceable removal limit: worn to base of groove
+
+wear:
+  # Base wear (mm tread lost per landing) tuned so median life lands in cited bands:
+  # main-gear ~250-350 landings, nose ~120-200 landings, over an ~10.5 mm usable swing.
+  base_wear_mm_per_landing:
+    nlg_l: 0.064
+    nlg_r: 0.066
+    mlg_l_inbd: 0.034
+    mlg_l_outbd: 0.036
+    mlg_r_inbd: 0.034
+    mlg_r_outbd: 0.036
+  # Per-landing multiplicative factors, each drawn ~Normal(1.0, sd), clipped >0.
+  factors:
+    load: { sd: 0.08 }       # aircraft weight / takeoff mass variation
+    severity: { sd: 0.12 }   # braking energy (rejected takeoffs, short runways)
+    taxi: { sd: 0.06 }       # taxi distance / ground-speed heat buildup
+    inflation: { sd: 0.03 }  # baseline inflation jitter (under-inflation RUNS handled below)
+    temp: { sd: 0.04 }       # ramp/runway temperature (hot vs cold airports)
+  susceptibility_sigma: 0.22 # per-tire LogNormal wear-rate multiplier (between-tire slope spread)
+  process_noise_sd: 0.10     # per-landing multiplicative process noise (averages out over a life)
+  accel_event_prob: 0.005    # rare accelerated-wear event probability per landing
+  accel_multiplier: [3.0, 6.0]
+
+inspection:
+  interval_cycles: [12, 24]  # tread inspected every 12-24 cycles
+  gauge_noise_sd_mm: 0.25    # tread-gauge measurement noise (SEPARATE from process noise)
+  gross_misread_prob: 0.01   # ~1% gross mis-reads
+  gross_misread_sd_mm: 1.5
+
+events:
+  fod_hazard_per_landing: 0.001    # FOD / damage competing-risk hazard -> EARLY_REMOVAL
+  hard_landing_prob: 0.02          # probability a landing is "hard"
+  hard_landing_g: [1.5, 2.2]       # vertical g on a hard landing
+  underinflation_event_prob: 0.002 # per-cycle chance a sustained under-inflation run STARTS
+  underinflation_run_cycles: [20, 40]
+  underinflation_wear_multiplier: [1.3, 1.8]  # accelerated wear during an under-inflation run
+
+# Home stations with on-hand spare stock of this tire size.
+stations:
+  - { code: "SGN", spare_stock: 3 }
+  - { code: "HAN", spare_stock: 5 }
+  - { code: "DAD", spare_stock: 4 }
+
+# Informational target bands (asserted by generator invariant tests).
+target_outcome_mix:
+  worn: [0.55, 0.65]
+  early_removal: [0.15, 0.25]
+  in_service: [0.15, 0.25]
+
+# Additional sensor / log signals. Drawn from a SEPARATE RNG stream so the wear physics
+# (outcome mix, median life, the demo story) stay byte-identical. brake_energy & sink_rate derive
+# from the already-drawn severity / hard-landing signals (genuine wear drivers); the rest are
+# captured covariates for the survival/baseline models. See docs/DATA_SOURCES.md.
+sensors:
+  brake_energy_base_mj: 2.6        # brake_energy_mj = base * landing severity (FOQA)
+  sink_rate_base_fpm: 130          # sink_rate_fpm  = base * hard-landing factor (FOQA)
+  ambient_temp_c: [-5, 45]         # METAR ambient temperature
+  crosswind_kt_scale: 7.0          # METAR crosswind (half-normal, clipped)
+  crosswind_kt_max: 30.0
+  lateral_load_g: [0.04, 0.34]     # FDR/ADS-B lateral turn load
+  runway_condition_codes: [6, 5, 4, 3, 2]        # ICAO RCC (6 = dry)
+  runway_condition_weights: [0.62, 0.20, 0.10, 0.05, 0.03]
+  high_wear_event_prob: 0.15       # fraction of hard landings that are RTO / training (route profile)
+  retread_level_values: [0, 1, 2, 3, 4, 5]       # casing retread history
+  retread_level_weights: [0.34, 0.25, 0.20, 0.12, 0.06, 0.03]

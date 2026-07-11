@@ -1,0 +1,19 @@
+# TreadCast — Aircraft Tire RUL POC dependencies (Python 3.11)
+numpy>=1.26,<2.1
+pandas>=2.0,<2.3
+pyarrow>=14
+scipy>=1.11
+statsmodels>=0.14
+lifelines>=0.27
+lightgbm>=4.1
+shap>=0.44
+plotly>=5.18
+streamlit>=1.49
+pillow>=10.0
+openai>=1.30       # production VLM backend (set OPENAI_API_KEY); optional
+# anthropic>=0.40           # Claude VLM backend (set ANTHROPIC_API_KEY); optional
+# anthropic[bedrock]>=0.40  # Bedrock VLM/agent backend (AWS credential chain); optional
+pyyaml>=6.0
+# dev
+pytest>=8.0
+ruff>=0.3
