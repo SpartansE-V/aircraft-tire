@@ -14,13 +14,14 @@ PRESIGNER_URL = "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api
 DIRECT_UPLOAD_URL = "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api/v1/uploads/images"
 
 
-def direct_upload(image_path: Path) -> dict:
+def direct_upload(image_path: Path, aircraft_id: str = "test-aircraft") -> dict:
     """Upload image directly via multipart/form-data (≤4MB)."""
     print(f"📤 Direct uploading {image_path.name}...")
 
     with open(image_path, "rb") as f:
         files = {"file": (image_path.name, f, "image/jpeg")}
-        response = requests.post(DIRECT_UPLOAD_URL, files=files, timeout=30)
+        data = {"aircraftId": aircraft_id}
+        response = requests.post(DIRECT_UPLOAD_URL, files=files, data=data, timeout=30)
 
     response.raise_for_status()
     result = response.json()
@@ -30,7 +31,7 @@ def direct_upload(image_path: Path) -> dict:
     return result
 
 
-def presigned_upload(image_path: Path) -> dict:
+def presigned_upload(image_path: Path, aircraft_id: str = "test-aircraft") -> dict:
     """Upload image via presigned URL (2-step: get URL, then PUT)."""
     print(f"📤 Presigned URL upload for {image_path.name}...")
 
@@ -39,7 +40,8 @@ def presigned_upload(image_path: Path) -> dict:
     payload = {
         "action": "put",
         "fileName": image_path.name,
-        "contentType": "image/jpeg"
+        "contentType": "image/jpeg",
+        "aircraftId": aircraft_id
     }
     response = requests.post(PRESIGNER_URL, json=payload, timeout=10)
     response.raise_for_status()
@@ -73,6 +75,11 @@ def main():
         default="presigned",
         help="Upload method (default: presigned)"
     )
+    parser.add_argument(
+        "--aircraft-id",
+        default="test-aircraft-001",
+        help="Aircraft ID for presigned uploads (default: test-aircraft-001)"
+    )
     args = parser.parse_args()
 
     if not args.image.exists():
@@ -88,11 +95,11 @@ def main():
             if file_size > 4 * 1024 * 1024:
                 print("⚠️  File too large for direct upload (>4MB), skipping...")
             else:
-                result = direct_upload(args.image)
+                result = direct_upload(args.image, args.aircraft_id)
                 print()
 
         if args.method in ("presigned", "both"):
-            result = presigned_upload(args.image)
+            result = presigned_upload(args.image, args.aircraft_id)
             print()
 
         print("🎉 All uploads completed!")
