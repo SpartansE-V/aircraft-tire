@@ -73,3 +73,9 @@ jobs:
       - name: Terraform apply
         working-directory: infra
         run: terraform apply -auto-approve -var="image_tag=${{ github.sha }}"
+
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### Deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -raw alb_dns_name)" >> "$GITHUB_STEP_SUMMARY"
