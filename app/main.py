@@ -4,21 +4,27 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app.api.errors import install_error_handlers, internal_error_response
+from app.api.routes.demo import router as demo_router
 from app.api.routes.health import router as health_router
+from app.api.routes.tire_assessment import router as tire_assessment_router
+from app.api.routes.tire_simulation import router as tire_simulation_router
 from app.api.routes.wear_severity import router as wear_severity_router
 from app.config import Settings, get_settings
 from app.domain.schemas import RootResponse
 
 SERVICE_NAME = "Aircraft Tire Wear Severity Calculator"
 SERVICE_VERSION = "1.0.0"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 logger = logging.getLogger("wear_severity_api.requests")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -95,7 +101,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     application.include_router(health_router)
+    application.include_router(tire_assessment_router)
     application.include_router(wear_severity_router)
+    application.include_router(tire_simulation_router)
+    application.include_router(demo_router)
+    application.mount("/demo-assets", StaticFiles(directory=STATIC_DIR), name="demo-assets")
     return application
 
 
