@@ -1,6 +1,9 @@
-.PHONY: install install-ai run run-api run-web ui data scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
+.PHONY: install install-ai run run-api run-web ui data enrich-scans scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
 
 WEB_DIR := ../web
+# Package imports are `app.*`; the uv project lives in this directory, so the repo
+# root (parent) must be on PYTHONPATH when running modules from here.
+export PYTHONPATH := ..
 
 # --- Backend (API) ---
 install:
@@ -22,10 +25,13 @@ install-ai:
 	uv sync --extra ai
 
 ui:
-	uv run streamlit run app/tire_rul/app.py
+	uv run streamlit run ../app/tire_rul/app.py
 
 data:
 	uv run python -m app.tire_rul.generate_data
+
+enrich-scans:
+	uv run python -m app.tire_rul.enrich_tire_assets
 
 scans:
 	uv run python -m app.tire_rul.generate_scans
@@ -38,7 +44,7 @@ train:
 
 # --- Quality gates ---
 test:
-	uv run pytest -q
+	uv run pytest -q ../tests
 
 lint:
 	uv run ruff check .
@@ -47,10 +53,10 @@ format-check:
 	uv run ruff format --check .
 
 type-check:
-	uv run mypy app
+	uv run mypy .
 
 compile:
-	uv run python -m compileall app
+	uv run python -m compileall .
 
 check: format-check lint type-check test compile
 

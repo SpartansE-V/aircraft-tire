@@ -15,6 +15,8 @@ export default defineConfig(({ command }) => ({
   server: {
     proxy: {
       '/api': { target: API_PROXY, changeOrigin: true },
+      // Mock tyre scan images (frame / flatten / circle) served by FastAPI StaticFiles.
+      '/assets/mock-tyres': { target: API_PROXY, changeOrigin: true },
     },
   },
 }))

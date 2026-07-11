@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { TIRE_TYPES, type Defect } from './data'
+import { tireTypeById, type Defect, type TireModelTypeId } from './data'
 import { HUE } from './charts'
 
 type Mode = 'solid' | 'wireframe'
@@ -106,18 +106,20 @@ export default function TireViewer({
   defects,
   serial,
   theme,
+  modelType = 'radial',
 }: {
   defects: Defect[]
   serial: string
   theme: 'dark' | 'light'
+  /** Construction type from the database — one GLB per wheel, no type switcher. */
+  modelType?: TireModelTypeId
 }) {
   const host = useRef<HTMLDivElement>(null)
   const overlay = useRef<HTMLDivElement>(null)
   const [mode, setMode] = useState<Mode>('solid')
-  const [typeIdx, setTypeIdx] = useState(0) // TIRE_TYPES[0] = Radial, what this fleet flies
   const [error, setError] = useState<string | null>(null)
   const setWireframe = useRef<((w: boolean) => void) | null>(null)
-  const tt = TIRE_TYPES[typeIdx]
+  const tt = tireTypeById(modelType)
 
   useEffect(() => {
     setError(null)
@@ -178,31 +180,71 @@ export default function TireViewer({
         grid.position.y = -s.y * 0.62
         scene.add(grid)
 
-        // The tire is one mesh with no UVs — paint defect zones into vertex colors.
+        // Crack overlays only — healthy tires arrive with defects=[] so nothing paints.
         const tire = model.getObjectByName('Tire') as THREE.Mesh | undefined
         if (!tire) return
         mesh = tire
         const base = (tire.material as THREE.MeshStandardMaterial).color.clone()
         const mat = (tire.material as THREE.MeshStandardMaterial).clone()
-        mat.color.set(0xffffff) // white base so vertex colors show at full strength
+        mat.color.set(0xffffff)
         mat.vertexColors = true
         tire.material = mat
 
         const pos = tire.geometry.attributes.position
+        const baseColors = new Float32Array(pos.count * 3)
         const colors = new Float32Array(pos.count * 3)
+        const hitIdx = new Int16Array(pos.count)
         const v = new THREE.Vector3()
         const tint = new THREE.Color()
+        hitIdx.fill(-1)
         for (let i = 0; i < pos.count; i++) {
           v.fromBufferAttribute(pos, i)
-          const hit = defects.find((d) => v.distanceTo(new THREE.Vector3(...d.at)) < d.r)
-          ;(hit ? tint.set(SEV_COLOR[hit.severity]) : base).toArray(colors, i * 3)
+          let best = -1
+          let bestDist = Infinity
+          for (let di = 0; di < defects.length; di++) {
+            const d = defects[di]
+            const dist = v.distanceTo(new THREE.Vector3(...d.at))
+            if (dist < d.r && dist < bestDist) {
+              bestDist = dist
+              best = di
+            }
+          }
+          hitIdx[i] = best
+          ;(best >= 0 ? tint.set(SEV_COLOR[defects[best].severity]) : base).toArray(baseColors, i * 3)
         }
+        colors.set(baseColors)
         tire.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3))
 
         setWireframe.current = (w) => {
           mat.wireframe = w
         }
         setWireframe.current(mode === 'wireframe')
+
+        // Wave pulse: expand/contract crack highlight radius via vertex colour intensity.
+        const waveClock = new THREE.Clock()
+        const paintWave = () => {
+          if (!defects.some((d) => d.wave !== false && d.kind === 'damage')) return
+          const t = waveClock.getElapsedTime()
+          const pulse = 0.55 + 0.45 * Math.sin(t * 3.2)
+          const warm = new THREE.Color()
+          for (let i = 0; i < pos.count; i++) {
+            const di = hitIdx[i]
+            if (di < 0) {
+              colors[i * 3] = baseColors[i * 3]
+              colors[i * 3 + 1] = baseColors[i * 3 + 1]
+              colors[i * 3 + 2] = baseColors[i * 3 + 2]
+              continue
+            }
+            const d = defects[di]
+            if (d.wave === false) continue
+            warm.set(SEV_COLOR[d.severity])
+            warm.lerp(base, 1 - pulse)
+            warm.toArray(colors, i * 3)
+          }
+          const attr = tire.geometry.getAttribute('color') as THREE.BufferAttribute
+          attr.needsUpdate = true
+        }
+        ;(tire as THREE.Mesh & { __paintWave?: () => void }).__paintWave = paintWave
       },
       undefined,
       () => setError(`${tt.model} failed to load`),
@@ -214,6 +256,8 @@ export default function TireViewer({
     const cam = new THREE.Vector3()
     const tick = () => {
       controls.update()
+      const paintWave = (mesh as (THREE.Mesh & { __paintWave?: () => void }) | null)?.__paintWave
+      paintWave?.()
       renderer.render(scene, camera)
       if (mesh && overlay.current) {
         camera.getWorldPosition(cam)
@@ -223,8 +267,6 @@ export default function TireViewer({
           if (!node) return
           p.set(...d.at)
           mesh!.localToWorld(p)
-          // Model is centred on the origin, so a zone faces the camera when its outward
-          // direction agrees with the camera's — dim it when it swings round the back.
           const facing = p.dot(cam) > 0
           p.project(camera)
           node.style.transform = `translate(-50%,-50%) translate(${((p.x + 1) / 2) * el.clientWidth}px, ${((1 - p.y) / 2) * el.clientHeight}px)`
@@ -250,7 +292,7 @@ export default function TireViewer({
       el.removeChild(renderer.domElement)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defects, theme, typeIdx])
+  }, [defects, theme, modelType])
 
   useEffect(() => setWireframe.current?.(mode === 'wireframe'), [mode])
 
@@ -258,12 +300,12 @@ export default function TireViewer({
     <div className="relative h-full w-full overflow-hidden">
       <div ref={host} className="h-full w-full" />
 
-      {/* projected defect callouts */}
+      {/* projected defect callouts — crack centres drive the wave highlight */}
       <div ref={overlay} className="pointer-events-none absolute inset-0">
         {defects.map((d) => (
           <div key={d.label} className="absolute left-0 top-0 flex items-center gap-2 whitespace-nowrap">
             <span
-              className="h-2.5 w-2.5 rotate-45 border"
+              className={`h-2.5 w-2.5 rotate-45 border ${d.wave !== false ? 'animate-pulse' : ''}`}
               style={{ borderColor: SEV_COLOR[d.severity], background: `${SEV_COLOR[d.severity]}33` }}
             />
             <span
@@ -272,6 +314,9 @@ export default function TireViewer({
             >
               {d.kind === 'damage' ? '⚠ ' : '≈ '}
               {d.zone}
+              {d.lateral_pct != null && (
+                <span className="ml-1 text-[var(--ink-4)]">· {d.lateral_pct > 0 ? '+' : ''}{d.lateral_pct.toFixed(0)}%</span>
+              )}
             </span>
           </div>
         ))}
@@ -294,24 +339,14 @@ export default function TireViewer({
         ))}
       </div>
 
-      {/* Construction type — swaps the GLB and tells you what airframe it belongs on. */}
+      {/* Construction type is fixed per wheel from the database — display only. */}
       <div className="absolute right-4 top-4 w-52 text-right">
-        <div className="flex justify-end text-[11px] uppercase tracking-widest">
-          {TIRE_TYPES.map((t, i) => (
-            <button
-              key={t.id}
-              onClick={() => setTypeIdx(i)}
-              className={`border border-[var(--line-2)] px-2.5 py-1.5 transition-colors [&:not(:last-child)]:border-r-0 ${
-                i === typeIdx ? 'bg-[var(--primary-soft)] text-[var(--primary)]' : 'text-[var(--ink-3)] hover:text-[var(--ink-2)]'
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
+        <div className="inline-block border border-[var(--line-2)] bg-[var(--primary-soft)] px-2.5 py-1.5 text-[11px] uppercase tracking-widest text-[var(--primary)]">
+          {tt.name}
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
           {tt.fits}
-          {tt.fitted && <span className="ml-1.5 text-[var(--primary)]">· fitted</span>}
+          <span className="ml-1.5 text-[var(--primary)]">· fitted</span>
         </p>
         <p className="mt-1 text-[10px] leading-relaxed text-[var(--ink-4)]">{tt.planes}</p>
         <p className="mt-1 text-[10px] leading-relaxed text-[var(--ink-4)]">{tt.note}</p>

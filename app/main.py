@@ -7,8 +7,11 @@ from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
+from pathlib import Path
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app.api.errors import install_error_handlers, internal_error_response
@@ -19,6 +22,8 @@ from app.api.routes.tire_rul import router as tire_rul_router
 from app.api.routes.tread_depth import router as tread_depth_router
 from app.config import Settings, get_settings
 from app.domain.schemas import RootResponse
+
+_MOCK_TYRES_DIR = Path(__file__).resolve().parents[1] / "assets" / "mock-tyres"
 
 SERVICE_NAME = "Aircraft Tire Assessment API"
 SERVICE_VERSION = "1.0.0"
@@ -102,6 +107,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(crack_detector_router)
     application.include_router(tread_depth_router)
     application.include_router(tire_rul_router)
+
+    if _MOCK_TYRES_DIR.is_dir():
+        application.mount(
+            "/assets/mock-tyres",
+            StaticFiles(directory=str(_MOCK_TYRES_DIR)),
+            name="mock-tyres",
+        )
     return application
 
 
