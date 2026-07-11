@@ -1,5 +1,8 @@
-fastapi>=0.115,<1.0
+# FastAPI service deps. Torch + MASt3R/DUSt3R/CroCo are installed in the
+# Dockerfile (from the pytorch base image and the cloned mast3r repo).
 fastapi>=0.115,<1.0
 uvicorn>=0.35,<1.0
 pydantic>=2.11,<3.0
 python-multipart>=0.0.9,<1.0
+numpy>=1.26,<3.0
+trimesh>=4.0,<5.0
