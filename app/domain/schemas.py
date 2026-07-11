@@ -602,6 +602,113 @@ class WheelStatusResponse(StrictSchema):
     disclaimer: str
 
 
+# --- /tyres dashboard fleet tires (scan status + construction + 3D defects) ---
+
+TireScanStatusValue = Literal["healthy", "warning", "error"]
+TireModelTypeValue = Literal["radial", "type_vii", "type_iii"]
+TireScanSideValue = Literal["left", "right"]
+TreadDepthBandValue = Literal["1-2mm", "2-3mm", "3-4mm", "4-5mm", "5-6mm"]
+
+
+class TireDefect3D(StrictSchema):
+    """One crack overlay for the 3D tire viewer (tire-local coords + wave highlight)."""
+
+    kind: Literal["wear", "damage"]
+    label: str
+    severity: Literal["low", "med", "high"]
+    zone: str
+    category: str | None = None
+    source: str | None = Field(default=None, description="circle | flatten-left | flatten-right")
+    angle_rad: float | None = Field(
+        default=None, allow_inf_nan=False, description="Crack angle around the hub (radians)."
+    )
+    lateral_pct: float | None = Field(
+        default=None,
+        allow_inf_nan=False,
+        description="Circle: −100% left … +100% right of the wheel centre-line.",
+    )
+    at: list[float] = Field(min_length=3, max_length=3)
+    r: float = Field(gt=0.0, le=2.0, allow_inf_nan=False)
+    wave: bool = Field(default=True, description="Pulse/wave highlight on the 3D mesh.")
+
+
+class TireScanAnnotation2D(StrictSchema):
+    """One 2D overlay from metadata.json for the scan-image viewer."""
+
+    category: Literal["crack", "tread-shallow"]
+    label: str | None = Field(
+        default=None,
+        description="Display label; null for cracks, 'shallow' for tread-shallow.",
+    )
+    bbox: list[float] = Field(min_length=4, max_length=4, description="COCO [x, y, w, h].")
+    center: dict[str, float] = Field(description="Annotation centre {x, y}.")
+    segmentation: list[list[float]] = Field(
+        default_factory=list,
+        description="Polygon rings as flat [x0,y0,x1,y1,...] coordinate lists.",
+    )
+
+
+class AnnotatedScanImage(StrictSchema):
+    url: str
+    width: int = Field(ge=0)
+    height: int = Field(ge=0)
+    annotations: list[TireScanAnnotation2D]
+
+
+class TireScanImages(StrictSchema):
+    circle: AnnotatedScanImage
+    flatten: AnnotatedScanImage
+    frames: list[AnnotatedScanImage]
+
+
+class FleetTireItem(StrictSchema):
+    """One currently-mounted tire for the /tyres dashboard."""
+
+    tire_id: str
+    aircraft_id: str
+    tail_number: str
+    position: WheelPositionValue
+    gear: Literal["nose", "main"]
+    brand: str
+    serial: str
+    tire_size: str
+    retread_level: int
+    new_tread_mm: float
+    wear_limit_mm: float
+    time_to_event_cycles: int
+    measured_groove_mm: float | None = None
+    pressure_pct: float | None = None
+    model_type: TireModelTypeValue
+    scan_status: TireScanStatusValue
+    scan_group: str
+    scan_side: TireScanSideValue
+    tread_depths: list[TreadDepthBandValue] = Field(
+        description="Per-groove depth bands; length 6 for radial, 4 for type VII / III."
+    )
+    defects: list[TireDefect3D]
+    images: TireScanImages
+
+
+class FleetAircraftItem(StrictSchema):
+    tail_number: str
+    aircraft_id: str
+    aircraft_type: str
+    home_station: str
+    cycles_per_day: float
+
+
+class FleetAircraftListResponse(StrictSchema):
+    aircraft: list[FleetAircraftItem]
+
+
+class FleetTiresResponse(StrictSchema):
+    tail_number: str
+    aircraft_id: str
+    aircraft_type: str
+    home_station: str
+    tires: list[FleetTireItem]
+
+
 class ModelPrediction(StrictSchema):
     x: float = Field(description="Bounding-box centre x-coordinate in pixels.")
     y: float = Field(description="Bounding-box centre y-coordinate in pixels.")

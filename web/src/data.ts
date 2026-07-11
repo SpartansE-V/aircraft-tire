@@ -3,7 +3,14 @@
 // ponytail: seeded LCG instead of a fixture file — data stays stable across renders,
 // and one line changes per-wheel behaviour.
 
+import type { AnnotatedScanImageData } from './AnnotatedScanImage'
+
 export type Status = 'ok' | 'watch' | 'action'
+
+/** Scan condition from linked mock-tyre annotations (crack / tread-shallow). */
+export type ScanStatus = 'healthy' | 'warning' | 'error'
+
+export type TireModelTypeId = 'radial' | 'type_vii' | 'type_iii'
 
 export type Tire = {
   id: string
@@ -36,6 +43,17 @@ export type Tire = {
   retreads: number
   partNo: string
   size: string
+  // Scan pack (from tires.parquet + mock-tyres metadata)
+  modelType: TireModelTypeId
+  scanStatus: ScanStatus
+  scanGroup?: string
+  scanSide?: 'left' | 'right'
+  treadDepths?: TreadDepthBand[]
+  images?: {
+    circle: AnnotatedScanImageData
+    flatten: AnnotatedScanImageData
+    frames: AnnotatedScanImageData[]
+  }
   // TPMS
   psi: number
   psiTarget: number
@@ -79,7 +97,13 @@ export type Defect = {
   zone: string
   at: [number, number, number] // tire-local coords, for the 3D overlay
   r: number
+  wave?: boolean // pulse highlight for cracks
+  angle_rad?: number
+  lateral_pct?: number
+  source?: string
 }
+
+export type TreadDepthBand = '1-2mm' | '2-3mm' | '3-4mm' | '4-5mm' | '5-6mm'
 
 export type Landing = {
   flt: string
@@ -166,6 +190,8 @@ function makeTire(i: number, [id, label, gear, role]: (typeof POSITIONS)[number]
     retreads: Math.floor(r() * 4),
     partNo: nose ? 'APR-1830' : 'APR-2036',
     size: nose ? '40 × 14 R16' : '46 × 16 R20',
+    modelType: 'radial',
+    scanStatus: defects.some((d) => d.severity === 'high') ? 'error' : defects.length ? 'warning' : 'healthy',
     psi: +psi.toFixed(1),
     psiTarget,
     psiTrend,
@@ -200,10 +226,16 @@ function makeTire(i: number, [id, label, gear, role]: (typeof POSITIONS)[number]
 export const FLEET_TIRES: Tire[] = POSITIONS.map((p, i) => makeTire(i, p))
 
 export function statusOf(t: Tire): Status {
+  if (t.scanStatus === 'error') return 'action'
+  if (t.scanStatus === 'warning') return 'watch'
   const psiDev = Math.abs(t.psi - t.psiTarget) / t.psiTarget
   if (t.defects.some((d) => d.severity === 'high') || psiDev > 0.05 || Math.min(...t.grooves) < t.grooveLimit) return 'action'
   if (psiDev > 0.03 || Math.min(...t.grooves) < t.grooveLimit + 1.5 || t.defects.length > 0 || !t.acarsOk) return 'watch'
   return 'ok'
+}
+
+export function tireTypeById(id: TireModelTypeId) {
+  return TIRE_TYPES.find((t) => t.id === id) ?? TIRE_TYPES[0]
 }
 
 export const AIRCRAFT = { reg: 'N774AC', type: 'B777-300ER', gate: 'A12', phase: 'TURNAROUND' }
