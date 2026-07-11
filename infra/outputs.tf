@@ -19,6 +19,16 @@ output "uploads_bucket_name" {
   value = module.uploads.bucket_name
 }
 
+output "upload_presigner_url" {
+  description = "Public HTTP API endpoint used to create and complete presigned uploads."
+  value       = module.uploads.presigner_url
+}
+
+output "image_upload_url" {
+  description = "Public multipart/form-data API endpoint for direct image uploads up to 4 MiB."
+  value       = module.uploads.image_upload_url
+}
+
 output "github_actions_role_arn" {
   description = "Role ARN GitHub Actions assumes via OIDC. Set as the AWS_ROLE_ARN repo secret."
   value       = module.github_oidc.role_arn
