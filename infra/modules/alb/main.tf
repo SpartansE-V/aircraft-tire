@@ -39,7 +39,7 @@ resource "aws_lb_target_group" "app" {
   target_type = "ip"
 
   health_check {
-    path                = "/health"
+    path                = var.health_check_path
     healthy_threshold   = 2
     unhealthy_threshold = 3
     interval            = 15
