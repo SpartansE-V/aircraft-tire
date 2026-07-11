@@ -19,7 +19,7 @@ The repository is one Python service with a hard seam between two layers:
  │   tire_rul_service.py  ───────────── THE SEAM ────────┼──►│ scoring.py        the pure brain    │
  └─────────────────────────────────────────────────┘   └─────────────────────────────────────┘
         POST /api/v1/tire_rul/predict ──► tire_rul_service ──► app.tire_rul.scoring.estimate_wheel()
-        (inputs: config/thresholds.yaml + artifacts/mixedlm_covariance.pkl + request readings)
+        (inputs: app/tire_rul/config/thresholds.yaml + app/tire_rul/artifacts/mixedlm_covariance.pkl + request readings)
 ```
 
 **Rule: `app/services/tire_rul_service.py` is the only backend module allowed to import `app.tire_rul`.**
@@ -37,7 +37,9 @@ the API image ships without pandas/statsmodels/streamlit.
 
 ## The AI research pipeline (app/tire_rul)
 
-Five decoupled modules in a linear pipeline; data flows through Parquet on disk.
+Five decoupled modules in a linear pipeline; data flows through Parquet on disk. The
+`config/`, `data/`, and `artifacts/` directories referenced below all live inside the
+`app/tire_rul/` package.
 
 ```
  config/*.yaml  ──►  generate_data.py  ──►  data/*.parquet  ──►  features.py  ──►  feature frame

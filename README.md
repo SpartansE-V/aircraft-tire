@@ -124,10 +124,10 @@ first passage over the fitted MixedLM prior).
 
 ```bash
 make install-ai # uv sync --extra ai
-make data       # write synthetic Parquet tables to data/
+make data       # write synthetic Parquet tables to app/tire_rul/data/
 make scans      # write the imaging/scanning layer (tire_scans) for the CV screen
 make logs       # write synthetic free-text defect logs for the Documents screen
-make train      # fit models, write artifacts/ + eval report
+make train      # fit models, write app/tire_rul/artifacts/ + eval report
 make ui         # launch the Streamlit demo
 ```
 

@@ -1,19 +1,20 @@
 """Central path resolution for data tables, model artifacts, and config files.
 
-Project root is resolved relative to this file (``app/tire_rul/paths.py`` -> project root),
+Locations are resolved relative to this file (``app/tire_rul/paths.py`` -> package dir),
 so every module reads/writes the same locations regardless of the current working directory.
+``data/``, ``artifacts/``, and ``config/`` all live inside the ``app/tire_rul`` package.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-# app/tire_rul/paths.py -> parents[2] == the repository root, where data/, artifacts/, and config/ live.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# app/tire_rul/paths.py -> parent == the app/tire_rul package dir, where data/, artifacts/, and config/ live.
+PACKAGE_DIR = Path(__file__).resolve().parent
 
-DATA_DIR = PROJECT_ROOT / "data"
-ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
-CONFIG_DIR = PROJECT_ROOT / "config"
+DATA_DIR = PACKAGE_DIR / "data"
+ARTIFACTS_DIR = PACKAGE_DIR / "artifacts"
+CONFIG_DIR = PACKAGE_DIR / "config"
 
 # --- Data tables (Parquet) ---
 FLEETS = DATA_DIR / "fleets.parquet"
