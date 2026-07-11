@@ -33,13 +33,16 @@ const inputCls =
 function buildRequest(
   position: WheelPosition,
   cycles: string,
+  plannedLandings: string,
   lpd: string,
   asOf: string,
   readings: ReadingDraft[],
 ): { req?: RulPredictionRequest; error?: string } {
   const current = Number(cycles)
+  const planned = Number(plannedLandings)
   const lpdNum = Number(lpd)
   if (cycles.trim() === '' || !Number.isFinite(current) || current < 0) return { error: 'Current cycles must be a number ≥ 0.' }
+  if (plannedLandings.trim() === '' || !Number.isFinite(planned) || planned < 0) return { error: 'Planned landings must be a number ≥ 0.' }
   if (lpd.trim() === '' || !Number.isFinite(lpdNum) || lpdNum <= 0) return { error: 'Landings/day must be a number > 0.' }
 
   const parsed: RulPredictionRequest['readings'] = []
@@ -52,7 +55,13 @@ function buildRequest(
     parsed.push({ cycles_since_install: c, measured_groove_mm: g })
   }
 
-  const req: RulPredictionRequest = { position, current_cycles: current, landings_per_day: lpdNum, readings: parsed }
+  const req: RulPredictionRequest = {
+    position,
+    current_cycles: current,
+    planned_landings: planned,
+    landings_per_day: lpdNum,
+    readings: parsed,
+  }
   if (asOf) req.as_of_date = asOf
   return { req }
 }
@@ -61,13 +70,14 @@ export default function PlanForecast() {
   const [tail, setTail] = useState('') // '' = none / manual
   const [position, setPosition] = useState<WheelPosition>('mlg_l_outbd')
   const [cycles, setCycles] = useState('250')
+  const [plannedLandings, setPlannedLandings] = useState('0')
   const [lpd, setLpd] = useState(String(DEFAULT_LANDINGS_PER_DAY))
   const [asOf, setAsOf] = useState('')
   const [readings, setReadings] = useState<ReadingDraft[]>(DEFAULT_READINGS)
   const [clientError, setClientError] = useState<string | null>(null)
   // Run once on mount with the defaults so the panel opens on a worked example, then on each Run.
   const [submitted, setSubmitted] = useState<RulPredictionRequest | null>(
-    () => buildRequest('mlg_l_outbd', '250', String(DEFAULT_LANDINGS_PER_DAY), '', DEFAULT_READINGS).req ?? null,
+    () => buildRequest('mlg_l_outbd', '250', '0', String(DEFAULT_LANDINGS_PER_DAY), '', DEFAULT_READINGS).req ?? null,
   )
 
   // Aircraft list is sourced from the worklist (no dedicated list-tails endpoint); an unfiltered
@@ -99,7 +109,7 @@ export default function PlanForecast() {
   const removeReading = (i: number) => setReadings((rs) => (rs.length > 1 ? rs.filter((_, j) => j !== i) : rs))
 
   const run = () => {
-    const { req, error } = buildRequest(position, cycles, lpd, asOf, readings)
+    const { req, error } = buildRequest(position, cycles, plannedLandings, lpd, asOf, readings)
     if (error) {
       setClientError(error)
       return
@@ -156,6 +166,10 @@ export default function PlanForecast() {
               <input type="number" min={0} value={cycles} onChange={(e) => setCycles(e.target.value)} className={`${inputCls} mt-1`} />
             </label>
             <label className="block">
+              <span className="text-[10px] uppercase tracking-widest text-[var(--ink-4)]">New planned landings</span>
+              <input type="number" min={0} value={plannedLandings} onChange={(e) => setPlannedLandings(e.target.value)} className={`${inputCls} mt-1`} />
+            </label>
+            <label className="block">
               <span className="text-[10px] uppercase tracking-widest text-[var(--ink-4)]">Landings / day</span>
               <input type="number" min={0} step={0.5} value={lpd} onChange={(e) => setLpd(e.target.value)} className={`${inputCls} mt-1`} />
             </label>
@@ -164,6 +178,11 @@ export default function PlanForecast() {
               <input type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} className={`${inputCls} mt-1`} />
             </label>
           </div>
+          <p className="-mt-2 text-[10px] leading-relaxed text-[var(--ink-4)]">
+            Forecast point: {Number.isFinite(Number(cycles)) && Number.isFinite(Number(plannedLandings))
+              ? `${Number(cycles) + Number(plannedLandings)} total landings`
+              : '—'} after the new plan.
+          </p>
 
           <div>
             <div className="mb-1 flex items-center justify-between">

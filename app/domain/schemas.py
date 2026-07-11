@@ -240,6 +240,7 @@ class TireRulPredictionRequest(StrictSchema):
                 {
                     "position": "mlg_r_inbd",
                     "current_cycles": 190,
+                    "planned_landings": 20,
                     "landings_per_day": 4.0,
                     "readings": [
                         {"cycles_since_install": 0, "measured_groove_mm": 12.0},
@@ -259,6 +260,16 @@ class TireRulPredictionRequest(StrictSchema):
         le=MAX_CURRENT_CYCLES,
         allow_inf_nan=False,
         description="Landings the tire has flown so far (the point RUL is measured from).",
+    )
+    planned_landings: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=MAX_CURRENT_CYCLES,
+        allow_inf_nan=False,
+        description=(
+            "Additional planned landings to apply as a what-if horizon. The forecast is evaluated "
+            "at current_cycles + planned_landings without changing the inspection history."
+        ),
     )
     landings_per_day: float = Field(
         gt=0.0,

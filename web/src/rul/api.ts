@@ -1,4 +1,4 @@
-// Typed client for the RUL service (POST /api/v1/rul/*). The types mirror app/domain/schemas.py
+// Typed client for the RUL service (POST /api/v1/tire_rul/*). The types mirror app/domain/schemas.py
 // one-for-one — if the pydantic contract moves, these move with it. JSON is snake_case on the wire
 // and stays snake_case here: the payloads are small, flat, and read straight into the SVG marks, so a
 // camelCase conversion layer would only add a place for the two shapes to drift apart.
@@ -21,6 +21,7 @@ export type InspectionReading = {
 export type RulPredictionRequest = {
   position: WheelPosition
   current_cycles: number
+  planned_landings?: number
   landings_per_day: number
   readings: InspectionReading[]
   as_of_date?: string // ISO YYYY-MM-DD
@@ -132,18 +133,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export function predictRul(req: RulPredictionRequest): Promise<RulPredictionResponse> {
-  return request<RulPredictionResponse>('/api/v1/rul/predict', { method: 'POST', body: JSON.stringify(req) })
+  return request<RulPredictionResponse>('/api/v1/tire_rul/predict', { method: 'POST', body: JSON.stringify(req) })
 }
 
 export function fetchWorklist(opts: { topN?: number; station?: string } = {}): Promise<FleetWorklistResponse> {
   const q = new URLSearchParams({ top_n: String(opts.topN ?? 10) })
   if (opts.station) q.set('station', opts.station)
-  return request<FleetWorklistResponse>(`/api/v1/rul/fleet/worklist?${q}`)
+  return request<FleetWorklistResponse>(`/api/v1/tire_rul/fleet/worklist?${q}`)
 }
 
 export function fetchWheelStatus(tail: string, position: WheelPosition): Promise<WheelStatusResponse> {
   const q = new URLSearchParams({ tail, position })
-  return request<WheelStatusResponse>(`/api/v1/rul/wheel/status?${q}`)
+  return request<WheelStatusResponse>(`/api/v1/tire_rul/wheel/status?${q}`)
 }
 
 // --- React Query hooks. Predictions and statuses are pure functions of their inputs, so they cache

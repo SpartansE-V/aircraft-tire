@@ -67,7 +67,7 @@ class TireRulService:
             prior_mean,
             prior_cov,
             scale,
-            current_cycles=request.current_cycles,
+            current_cycles=request.current_cycles + request.planned_landings,
             landings_per_day=request.landings_per_day,
             as_of_date=as_of,
             limit_mm=thresholds.wear_limit_mm,

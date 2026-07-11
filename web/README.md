@@ -10,7 +10,7 @@ React + Vite dashboard for the aircraft-tire POC. Three routes (`src/App.tsx`):
 
 ## RUL integration (`src/rul/`)
 
-The RUL views call the FastAPI backend at `/api/v1/rul/*` (see `app/api/routes/rul.py`):
+The RUL views call the FastAPI backend at `/api/v1/tire_rul/*` (see `app/api/routes/tire_rul.py`):
 
 - `src/rul/api.ts` — typed client + React Query hooks (`predict`, `fleet/worklist`, `wheel/status`).
 - `src/rul/positions.ts` — maps the 14 dashboard wheels to the 6 canonical model positions.

@@ -95,6 +95,20 @@ async def test_readings_field_is_optional(client: AsyncClient, rul_payload: dict
 
 
 @pytest.mark.asyncio
+async def test_planned_landings_updates_forecast_horizon(
+    client: AsyncClient, rul_payload: dict[str, Any]
+) -> None:
+    baseline = (await client.post("/api/v1/tire_rul/predict", json=rul_payload)).json()
+    rul_payload["planned_landings"] = 20
+    planned = (await client.post("/api/v1/tire_rul/predict", json=rul_payload)).json()
+
+    assert planned["rul_landings"]["median"] < baseline["rul_landings"]["median"]
+    assert planned["rul_landings"]["median"] == pytest.approx(
+        baseline["rul_landings"]["median"] - 20, abs=0.2
+    )
+
+
+@pytest.mark.asyncio
 async def test_worn_tire_reports_replace_now(
     client: AsyncClient, rul_payload: dict[str, Any]
 ) -> None:
@@ -163,6 +177,8 @@ async def test_missing_required_fields_rejected(client: AsyncClient) -> None:
     [
         ("current_cycles", -1),
         ("current_cycles", 20_001),
+        ("planned_landings", -1),
+        ("planned_landings", 20_001),
         ("landings_per_day", 0),
         ("landings_per_day", 21),
     ],

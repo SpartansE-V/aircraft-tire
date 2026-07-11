@@ -45,7 +45,7 @@ export const STATUS = {
 
 const TABS = [
   { path: '/tyres', label: 'Tyres' },
-  { path: '/rul', label: 'RUL forecast' },
+  { path: '/rul', label: 'Tire Remaining Useful Life Prediction' },
   { path: '/simulate-landing', label: 'Simulate landing' },
 ]
 

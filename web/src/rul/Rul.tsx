@@ -120,7 +120,7 @@ export default function Rul() {
       </div>
 
       <footer className="mt-4 flex flex-wrap justify-between gap-2 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">
-        <span>Live · /api/v1/rul · fleet worklist + per-wheel status + planner</span>
+        <span>Live · /api/v1/tire_rul · fleet worklist + per-wheel status + planner</span>
         <span>Decision-support only — not an approval for service</span>
       </footer>
     </div>
