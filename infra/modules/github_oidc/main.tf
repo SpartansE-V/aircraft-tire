@@ -67,7 +67,7 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "ecr:UploadLayerPart",
       "ecr:CompleteLayerUpload",
     ]
-    resources = [var.ecr_repository_arn]
+    resources = ["arn:aws:ecr:*:*:repository/${var.project_name}*"]
   }
 
   statement {
@@ -85,10 +85,13 @@ data "aws_iam_policy_document" "github_actions_deploy" {
   }
 
   statement {
-    sid       = "PassRolesToECS"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = [var.execution_role_arn, var.task_role_arn]
+    sid     = "PassRolesToECS"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:aws:iam::*:role/${var.project_name}*-ecs-execution-role",
+      "arn:aws:iam::*:role/${var.project_name}*-ecs-task-role",
+    ]
     condition {
       test     = "StringEquals"
       variable = "iam:PassedToService"
@@ -125,6 +128,21 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     resources = ["arn:aws:dynamodb:${var.aws_region}:*:table/${var.tfstate_lock_table}"]
   }
 
+  # This policy (and the role it's attached to) are part of the stack too -
+  # future applies of this file need to be able to update themselves.
+  statement {
+    sid    = "SelfManage"
+    effect = "Allow"
+    actions = [
+      "iam:GetRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+    ]
+    resources = [aws_iam_role.github_actions_deploy.arn]
+  }
+
   # Terraform apply itself needs to manage the VPC/ALB/ECS/ECR/IAM resources
   # this stack owns. Kept broad (not resource-scoped) because Terraform must
   # be able to create/read/update/delete all resource types in this file set;
@@ -148,9 +166,10 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     resources = ["*"]
   }
 
-  # ECS task execution/task roles are part of this stack too, so Terraform
-  # needs full lifecycle management of them specifically (scoped by name,
-  # unlike the broader read-only statement above).
+  # ECS task execution/task roles (one pair per service, e.g. aircraft-tire
+  # and aircraft-tire-3d-reconstructor) are part of this stack too, so
+  # Terraform needs full lifecycle management of them specifically (scoped
+  # by name prefix, unlike the broader read-only statement above).
   statement {
     sid    = "ManageECSTaskRoles"
     effect = "Allow"
@@ -167,8 +186,20 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "iam:UntagRole",
     ]
     resources = [
-      "arn:aws:iam::*:role/${var.project_name}-ecs-execution-role",
-      "arn:aws:iam::*:role/${var.project_name}-ecs-task-role",
+      "arn:aws:iam::*:role/${var.project_name}*-ecs-execution-role",
+      "arn:aws:iam::*:role/${var.project_name}*-ecs-task-role",
+    ]
+  }
+
+  # The uploads bucket this stack owns (name is derived from project_name +
+  # account id in modules/uploads), scoped by name prefix rather than "*".
+  statement {
+    sid     = "ManageUploadsBucket"
+    effect  = "Allow"
+    actions = ["s3:*"]
+    resources = [
+      "arn:aws:s3:::${var.project_name}-uploads-*",
+      "arn:aws:s3:::${var.project_name}-uploads-*/*",
     ]
   }
 }

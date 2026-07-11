@@ -1,9 +1,40 @@
+# Build context is the whole repo, but the API image only needs pyproject/uv.lock,
+# app/, config/, and artifacts/mixedlm_covariance.pkl (see Dockerfile). Everything
+# below is excluded to keep the context small.
+
+# VCS / caches / envs
 .git
+.gitignore
 .venv
+venv
+env
 __pycache__
+*.pyc
 .pytest_cache
 .mypy_cache
 .ruff_cache
 .env
+.env.*
+.DS_Store
+.claude
+
+# Other services and infra — not part of the API image
+web
+3d-reconstructor
+infra
+.github
+docs
+docker-compose.yml
+README.md
+
+# Tests aren't needed at runtime
 tests
-*.pyc
+
+# Synthetic training data and heavy research artifacts — not needed to serve the API.
+# The Dockerfile copies only artifacts/mixedlm_covariance.pkl (the fitted prior).
+data
+artifacts/mixedlm.pkl
+artifacts/lightgbm.txt
+artifacts/weibull_aft.pkl
+artifacts/shap_values.parquet
+artifacts/eval_report.json
