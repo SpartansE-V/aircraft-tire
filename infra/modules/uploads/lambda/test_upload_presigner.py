@@ -44,10 +44,14 @@ def invoke_upload(
     aircraft_id="aircraft-1",
 ):
     boundary = "test-boundary"
-    body = (
-        f"--{boundary}\r\n"
-        'Content-Disposition: form-data; name="aircraft_id"\r\n\r\n'
-        f"{aircraft_id}\r\n"
+    metadata_part = ""
+    if aircraft_id is not None:
+        metadata_part = (
+            f"--{boundary}\r\n"
+            'Content-Disposition: form-data; name="aircraft_id"\r\n\r\n'
+            f"{aircraft_id}\r\n"
+        )
+    body = metadata_part.encode() + (
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
         f"Content-Type: {content_type}\r\n\r\n"
@@ -160,18 +164,26 @@ class UploadPresignerTests(unittest.TestCase):
     def test_direct_upload_writes_valid_image_to_s3(self):
         fake_s3.put_object.return_value = {"ETag": '"etag"', "VersionId": "version-1"}
 
-        response = invoke_upload(b"\x89PNG\r\n\x1a\nimage-content")
+        response = invoke_upload(b"\x89PNG\r\n\x1a\nimage-content", aircraft_id=None)
 
         self.assertEqual(response["statusCode"], 201)
         body = json.loads(response["body"])
         self.assertTrue(body["key"].endswith("/scan.png"))
+        self.assertEqual(body["presignedUrl"], "https://signed.example/upload")
+        self.assertEqual(body["expiresIn"], 900)
         self.assertEqual(fake_s3.put_object.call_args.kwargs["ContentType"], "image/png")
         self.assertEqual(
             fake_s3.put_object.call_args.kwargs["Body"],
             b"\x89PNG\r\n\x1a\nimage-content",
         )
         fake_dynamodb.put_item.assert_called_once()
+        self.assertNotIn("aircraft_id", fake_dynamodb.put_item.call_args.kwargs["Item"])
         self.assertEqual(fake_dynamodb.update_item.call_args.kwargs["TableName"], "test-images")
+        fake_s3.generate_presigned_url.assert_called_once_with(
+            "get_object",
+            Params={"Bucket": "test-uploads", "Key": body["key"]},
+            ExpiresIn=900,
+        )
 
     def test_direct_upload_rejects_mime_mismatch(self):
         response = invoke_upload(b"\x89PNG\r\n\x1a\nimage-content", content_type="image/jpeg")
@@ -179,13 +191,14 @@ class UploadPresignerTests(unittest.TestCase):
         self.assertEqual(response["statusCode"], 400)
         fake_s3.put_object.assert_not_called()
 
-    def test_presign_requires_aircraft_id(self):
+    def test_presign_allows_image_without_aircraft_id(self):
         response = invoke(
             {"action": "put", "fileName": "scan.png", "contentType": "image/png"}
         )
 
-        self.assertEqual(response["statusCode"], 400)
-        fake_dynamodb.put_item.assert_not_called()
+        self.assertEqual(response["statusCode"], 200)
+        item = fake_dynamodb.put_item.call_args.kwargs["Item"]
+        self.assertNotIn("aircraft_id", item)
 
     def test_s3_event_marks_presigned_upload_complete(self):
         response = upload_presigner.lambda_handler(

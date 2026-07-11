@@ -14,15 +14,16 @@ For images up to 4 MiB, upload directly through the API with one field named
 
 ```bash
 curl -X POST "$IMAGE_UPLOAD_URL" \
-  -F "aircraft_id=aircraft-uuid" \
-  -F "tail_number=VN-A701" \
-  -F "wheel_position=LEFT_MAIN_INBOARD" \
   -F "file=@tire-left.jpg;type=image/jpeg"
 ```
 
+Only `file` is required. `aircraft_id`, `tail_number`, and `wheel_position` are
+optional metadata fields.
+
 The endpoint validates the declared MIME type against the file signature and
-returns `201` with the S3 `key`, `etag`, and `versionId`. Use the presigned flow
-below for larger images.
+returns `201` with the S3 `key`, `etag`, `versionId`, and a short-lived
+`presignedUrl` for reading the private image. `expiresIn` contains its lifetime
+in seconds. Use the presigned flow below for larger images.
 
 ## Small image (single PUT)
 
@@ -95,8 +96,9 @@ The table uses on-demand billing, point-in-time recovery, encryption at rest,
 and deletion protection. Disable deletion protection explicitly before an
 intentional Terraform destroy.
 
-Records contain `aircraft_id`, optional `tail_number` and `wheel_position`, S3
+Records contain optional `aircraft_id`, `tail_number`, and `wheel_position`, S3
 bucket/key, original filename, MIME type, size, ETag/version, upload status, and
-UTC timestamps. Upload status moves through `PENDING`, `UPLOADED`, `FAILED`, or
-`ABORTED`; S3 ObjectCreated events reconcile presigned uploads after the client
-writes the object directly to S3.
+UTC timestamps. Records without `aircraft_id` remain valid but do not appear in
+the sparse aircraft GSI. Upload status moves through `PENDING`, `UPLOADED`,
+`FAILED`, or `ABORTED`; S3 ObjectCreated events reconcile presigned uploads
+after the client writes the object directly to S3.
