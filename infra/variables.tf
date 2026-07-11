@@ -22,38 +22,26 @@ variable "azs" {
   default     = ["ap-southeast-1a", "ap-southeast-1b"]
 }
 
-variable "container_port" {
-  description = "Port the container listens on (matches app/main.py + Dockerfile)."
-  type        = number
-  default     = 8000
-}
-
-variable "task_cpu" {
-  description = "Fargate task CPU units."
-  type        = number
-  default     = 256
-}
-
-variable "task_memory" {
-  description = "Fargate task memory (MiB)."
-  type        = number
-  default     = 512
-}
-
-variable "desired_count" {
-  description = "Number of Fargate tasks to run."
-  type        = number
-  default     = 2
-}
-
 variable "cors_origins" {
-  description = "Value for the CORS_ORIGINS env var."
+  description = "Value for the CORS_ORIGINS env var (app service only)."
   type        = string
   default     = "http://localhost:3000"
 }
 
-variable "image_tag" {
-  description = "Container image tag to deploy. CI overrides this per build (commit SHA)."
+variable "image_tag_app" {
+  description = "Image tag to deploy for the app service. CI overrides this per build (commit SHA)."
+  type        = string
+  default     = "latest"
+}
+
+variable "image_tag_reconstructor" {
+  description = "Image tag to deploy for the 3d-reconstructor service. CI overrides this per build (commit SHA)."
+  type        = string
+  default     = "latest"
+}
+
+variable "image_tag_web" {
+  description = "Image tag to deploy for the web (frontend) service. CI overrides this per build (commit SHA)."
   type        = string
   default     = "latest"
 }

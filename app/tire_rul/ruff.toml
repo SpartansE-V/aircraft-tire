@@ -1,0 +1,12 @@
+# Scoped style for the vendored AI/research package (TreadCast), which was written at
+# 120-char lines. The backend (app/api, app/domain, app/services, app/main.py) keeps the
+# stricter root config. Mirrors the mypy carve-out in the root pyproject.toml.
+extend = "../../pyproject.toml"
+line-length = 120
+
+[lint]
+# UP042 (str+Enum -> StrEnum) is deliberately kept: enum `.value` semantics are relied on
+# across parquet serialization and the scoring pipeline. E501 matches the original repo's
+# policy (line length was never enforced on the research code; longest offenders are
+# Streamlit UI strings).
+ignore = ["UP042", "E501"]

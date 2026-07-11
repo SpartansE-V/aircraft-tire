@@ -14,6 +14,11 @@ variable "container_port" {
   type = number
 }
 
+variable "health_check_path" {
+  type    = string
+  default = "/health"
+}
+
 variable "tags" {
   type    = map(string)
   default = {}

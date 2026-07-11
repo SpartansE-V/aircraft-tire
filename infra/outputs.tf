@@ -1,18 +1,22 @@
-output "alb_dns_name" {
-  description = "Public URL of the load balancer (HTTP)."
-  value       = "http://${module.alb.dns_name}"
+output "alb_dns_names" {
+  description = "Public URL of each service's load balancer (HTTP)."
+  value       = { for k, v in module.alb : k => "http://${v.dns_name}" }
 }
 
-output "ecr_repository_url" {
-  value = module.ecr.repository_url
+output "ecr_repository_urls" {
+  value = { for k, v in module.ecr : k => v.repository_url }
 }
 
 output "ecs_cluster_name" {
-  value = module.ecs.cluster_name
+  value = aws_ecs_cluster.main.name
 }
 
-output "ecs_service_name" {
-  value = module.ecs.service_name
+output "ecs_service_names" {
+  value = { for k, v in module.ecs : k => v.service_name }
+}
+
+output "uploads_bucket_name" {
+  value = module.uploads.bucket_name
 }
 
 output "github_actions_role_arn" {

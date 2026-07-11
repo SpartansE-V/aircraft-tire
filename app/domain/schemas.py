@@ -1,9 +1,10 @@
 """Strict public request and response schemas."""
 
-from typing import Literal
+from datetime import date
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 GearValue = Literal["main", "nose"]
 SeverityLevel = Literal["LOW", "MODERATE", "HIGH", "CRITICAL"]
@@ -188,6 +189,276 @@ class RootResponse(StrictSchema):
 
 class HealthResponse(StrictSchema):
     status: str
+
+
+# ---------------------------------------------------------------------------
+# RUL prediction (the AI endpoint) — contract for app.services.tire_rul_service,
+# which is the only place the backend crosses into the app.tire_rul model package.
+# ---------------------------------------------------------------------------
+WheelPositionValue = Literal[
+    "nlg_l",
+    "nlg_r",
+    "mlg_l_inbd",
+    "mlg_l_outbd",
+    "mlg_r_inbd",
+    "mlg_r_outbd",
+]
+TireRulStatusValue = Literal["healthy", "monitor", "schedule", "replace_now"]
+TireRulSeverityValue = Literal["info", "warning", "critical"]
+
+MAX_READINGS = 200
+MAX_GROOVE_MM = 30.0
+MAX_CURRENT_CYCLES = 20_000.0
+MAX_LANDINGS_PER_DAY = 20.0
+
+
+class InspectionReading(StrictSchema):
+    """One tread-depth measurement for the tire being forecast."""
+
+    cycles_since_install: float = Field(
+        ge=0.0,
+        le=MAX_CURRENT_CYCLES,
+        allow_inf_nan=False,
+        description="Cumulative landings the tire had flown when this groove depth was measured.",
+    )
+    measured_groove_mm: float = Field(
+        gt=0.0,
+        le=MAX_GROOVE_MM,
+        allow_inf_nan=False,
+        description="Measured remaining groove depth in millimetres.",
+    )
+
+
+class TireRulPredictionRequest(StrictSchema):
+    """A single wheel's readings and utilization for one remaining-useful-life forecast."""
+
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "position": "mlg_r_inbd",
+                    "current_cycles": 190,
+                    "landings_per_day": 4.0,
+                    "readings": [
+                        {"cycles_since_install": 0, "measured_groove_mm": 12.0},
+                        {"cycles_since_install": 90, "measured_groove_mm": 9.0},
+                        {"cycles_since_install": 190, "measured_groove_mm": 6.1},
+                    ],
+                }
+            ]
+        },
+    )
+
+    position: WheelPositionValue = Field(
+        description="Wheel position; selects the fitted per-position degradation prior."
+    )
+    current_cycles: float = Field(
+        ge=0.0,
+        le=MAX_CURRENT_CYCLES,
+        allow_inf_nan=False,
+        description="Landings the tire has flown so far (the point RUL is measured from).",
+    )
+    landings_per_day: float = Field(
+        gt=0.0,
+        le=MAX_LANDINGS_PER_DAY,
+        allow_inf_nan=False,
+        description="Assumed utilization, used to convert remaining landings into calendar dates.",
+    )
+    readings: list[InspectionReading] = Field(
+        default_factory=list,
+        max_length=MAX_READINGS,
+        description=(
+            "Tread-depth history for this tire. May be empty — the forecast then falls back to the "
+            "fleet/position prior and is flagged low_confidence."
+        ),
+    )
+    as_of_date: date | None = Field(
+        default=None,
+        # JSON has no date type, so accept ISO "YYYY-MM-DD" strings despite model-level strictness.
+        strict=False,
+        description=(
+            "Reference date (ISO 8601, e.g. 2026-07-11) for the returned wear-to-limit dates. "
+            "Defaults to today (UTC)."
+        ),
+    )
+
+
+class TireRulQuantiles(StrictSchema):
+    p10: float = Field(description="Earliest-credible remaining landings (10th percentile).")
+    median: float = Field(description="Expected remaining landings (50th percentile).")
+    p90: float = Field(description="Latest-credible remaining landings (90th percentile).")
+    mean: float = Field(description="Mean remaining landings across Monte-Carlo draws.")
+
+
+class WearToLimitDates(StrictSchema):
+    earliest_credible_p10: date = Field(
+        description="Date the P10 (earliest-credible) RUL is reached."
+    )
+    median: date = Field(description="Date the median RUL is reached.")
+    p90: date = Field(description="Date the P90 (latest-credible) RUL is reached.")
+
+
+class TireRulStatus(StrictSchema):
+    status: TireRulStatusValue = Field(description="Overall wheel condition category.")
+    severity: TireRulSeverityValue = Field(
+        description="Severity of the recommended attention level."
+    )
+    headline: str = Field(description="One-line plain-language condition summary.")
+    recommended_action: str = Field(description="Suggested maintenance-planning action.")
+
+
+class TireRulPredictionResponse(StrictSchema):
+    prediction_id: UUID = Field(description="Stateless UUID for correlating this prediction.")
+    position: WheelPositionValue
+    rul_landings: TireRulQuantiles
+    wear_to_limit_dates: WearToLimitDates
+    p_cross_before_next_check: float = Field(
+        description="Probability the wear limit is crossed before the next scheduled check."
+    )
+    landings_per_day: float
+    readings_used: int = Field(description="Number of readings the posterior was fit on.")
+    low_confidence: bool = Field(
+        description="True when too few readings were supplied and the fleet prior dominates."
+    )
+    status: TireRulStatus
+    wear_limit_mm: float = Field(
+        description="Serviceable groove-depth limit used for the crossing."
+    )
+    model_version: str
+    disclaimer: str
+
+
+# ---------------------------------------------------------------------------
+# Maintenance Decision Agent — contract for app.services.agent_service, which
+# wraps app.tire_rul.agent (LLM tool-calling over the fleet dataset) for the FE.
+# ---------------------------------------------------------------------------
+AgentBackendValue = Literal["auto", "openai", "bedrock", "mock"]
+AgentRoleValue = Literal["user", "assistant"]
+
+MAX_AGENT_MESSAGES = 40
+MAX_AGENT_MESSAGE_CHARS = 4000
+MAX_WORKLIST_TOP_N = 50
+
+
+class AgentChatMessage(StrictSchema):
+    """One turn of the engineer/agent conversation."""
+
+    role: AgentRoleValue = Field(description="Who wrote the turn: the engineer or the agent.")
+    content: str = Field(
+        min_length=1,
+        max_length=MAX_AGENT_MESSAGE_CHARS,
+        description="Turn text. Assistant turns are the agent's earlier Markdown answers.",
+    )
+
+
+class AgentChatRequest(StrictSchema):
+    """Full conversation history, ending with the newest engineer message."""
+
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "messages": [
+                        {"role": "user", "content": "What should I do about VN-A320 MLG L INBD?"}
+                    ],
+                    "backend": "auto",
+                }
+            ]
+        },
+    )
+
+    messages: list[AgentChatMessage] = Field(
+        min_length=1,
+        max_length=MAX_AGENT_MESSAGES,
+        description=(
+            "Conversation so far, oldest first, ending with the newest user message. Send the "
+            "full history each call — the API is stateless and follow-ups may reference earlier "
+            "turns ('predict it')."
+        ),
+    )
+    backend: AgentBackendValue = Field(
+        default="auto",
+        description=(
+            "Agent backend: 'auto' picks the first configured LLM (OpenAI, then Bedrock) and "
+            "falls back to the offline deterministic planner ('mock')."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _last_message_is_user(self) -> "AgentChatRequest":
+        if self.messages[-1].role != "user":
+            raise ValueError("messages must end with a 'user' message")
+        return self
+
+
+class AgentToolCall(StrictSchema):
+    """One pipeline tool the agent invoked while investigating, with its raw result."""
+
+    tool: str = Field(description="Tool name (e.g. get_wheel_status, run_rul_prediction).")
+    args: dict[str, Any] = Field(description="Arguments the agent passed to the tool.")
+    result: dict[str, Any] = Field(description="JSON result the tool returned to the agent.")
+
+
+class AgentChatResponse(StrictSchema):
+    chat_id: UUID = Field(description="Stateless UUID for correlating this exchange.")
+    answer: str = Field(description="The agent's grounded answer, in Markdown.")
+    trace: list[AgentToolCall] = Field(
+        description="Ordered tool-call trace behind the answer (render as 'how it investigated')."
+    )
+    backend: str = Field(description="Backend that produced the answer, e.g. 'openai:gpt-4o-mini'.")
+    as_of_date: date = Field(description="Fleet snapshot date the tools answered from.")
+    disclaimer: str
+
+
+class PriorityWheel(StrictSchema):
+    """One row of the ranked maintenance worklist."""
+
+    rank: int
+    tail_number: str
+    position: WheelPositionValue
+    station: str = Field(description="Home station of the aircraft (spares are held per station).")
+    priority: float = Field(description="Composite priority: P(cross before check) x consequence.")
+    p_cross_before_next_check: float
+    rul_median_landings: float
+    rul_p10_landings: float
+    earliest_credible_date: date
+    low_confidence: bool
+    reason: str = Field(description="Why this wheel ranks here (plain language).")
+    action: str = Field(description="Recommended planning action.")
+
+
+class FleetWorklistResponse(StrictSchema):
+    as_of_date: date
+    wheels: list[PriorityWheel]
+    disclaimer: str
+
+
+class WheelStatusResponse(StrictSchema):
+    """Current condition + forecast for one mounted wheel of the fleet dataset."""
+
+    tail_number: str
+    position: WheelPositionValue
+    status: TireRulStatusValue
+    severity: TireRulSeverityValue
+    headline: str
+    explanation: str
+    recommended_action: str
+    rul_median_landings: float
+    rul_p10_landings: float
+    earliest_credible_date: date
+    p_cross_before_next_check: float
+    pressure_pct: float | None
+    pressure_action: str
+    station: str
+    spares_on_hand: int
+    utilization_landings_per_day: float
+    low_confidence: bool
+    as_of_date: date
+    disclaimer: str
 
 
 class ModelPrediction(StrictSchema):
