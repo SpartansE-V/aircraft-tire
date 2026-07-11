@@ -65,7 +65,7 @@ resource "aws_iam_role" "task" {
 
 resource "aws_ecs_task_definition" "app" {
   family                   = var.project_name
-  requires_compatibilities = ["FARGATE"]
+  requires_compatibilities = [var.launch_type]
   network_mode             = "awsvpc"
   cpu                      = var.task_cpu
   memory                   = var.task_memory
@@ -82,6 +82,9 @@ resource "aws_ecs_task_definition" "app" {
         protocol      = "tcp"
       }]
       environment = var.environment
+      resourceRequirements = var.gpu_count > 0 ? [
+        { type = "GPU", value = tostring(var.gpu_count) }
+      ] : null
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -102,9 +105,19 @@ resource "aws_ecs_service" "app" {
   cluster         = var.cluster_id
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.desired_count
-  launch_type     = "FARGATE"
 
-  platform_version = "LATEST"
+  # Fargate: fixed launch_type. EC2/GPU: capacity_provider_strategy instead -
+  # the two are mutually exclusive on aws_ecs_service.
+  launch_type      = var.launch_type == "FARGATE" ? "FARGATE" : null
+  platform_version = var.launch_type == "FARGATE" ? "LATEST" : null
+
+  dynamic "capacity_provider_strategy" {
+    for_each = var.launch_type == "EC2" ? [1] : []
+    content {
+      capacity_provider = var.capacity_provider_name
+      weight            = 1
+    }
+  }
 
   network_configuration {
     subnets          = var.private_subnet_ids
@@ -132,6 +145,8 @@ resource "aws_ecs_service" "app" {
 }
 
 resource "aws_appautoscaling_target" "app" {
+  count = var.enable_autoscaling ? 1 : 0
+
   max_capacity       = 10
   min_capacity       = var.desired_count
   resource_id        = "service/${var.cluster_name}/${aws_ecs_service.app.name}"
@@ -140,11 +155,13 @@ resource "aws_appautoscaling_target" "app" {
 }
 
 resource "aws_appautoscaling_policy" "cpu" {
+  count = var.enable_autoscaling ? 1 : 0
+
   name               = "${var.project_name}-cpu-scaling"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.app.resource_id
-  scalable_dimension = aws_appautoscaling_target.app.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.app.service_namespace
+  resource_id        = aws_appautoscaling_target.app[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.app[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.app[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     predefined_metric_specification {
