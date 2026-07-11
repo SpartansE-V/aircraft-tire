@@ -69,8 +69,31 @@ def _path_from_env(name: str, default: Path) -> Path:
     return value.resolve()
 
 
+def _load_local_dotenv() -> None:
+    """Populate os.environ from the app's local .env (if present).
+
+    Without this, running `python app.py` without first `source`-ing .env leaves
+    RECONSTRUCTOR_API_URL unset -> it defaults to http://localhost:8000 and silently
+    talks to a local reconstructor instead of the configured (e.g. deployed) one.
+    Real exported env vars win (setdefault), so `source .env` still overrides.
+    """
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, value = stripped.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
 @lru_cache
 def get_config() -> Config:
+    _load_local_dotenv()
     root_dir = Path(__file__).resolve().parents[1]
     return Config(
         reconstructor_api_url=os.getenv("RECONSTRUCTOR_API_URL", "http://localhost:8000").rstrip("/"),
