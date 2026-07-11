@@ -17,12 +17,39 @@ concurrency:
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read
+  actions: read # required to poll infra.yml's run status below
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
 
 jobs:
+  # The concurrency group above only guarantees these two workflows don't
+  # apply at the same time - it doesn't guarantee infra.yml goes first. Make
+  # that explicit: if a "Deploy Infra" run is in progress or queued, wait for
+  # it, since it applies the whole stack and could otherwise clobber
+  # in-flight per-service changes made here (or vice versa).
+  wait-for-infra:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Deploy Infra to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 60); do
+            in_flight=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow infra.yml \
+              --json status --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
+            if [ "$in_flight" = "0" ]; then
+              echo "No Deploy Infra run in progress, proceeding."
+              exit 0
+            fi
+            echo "Deploy Infra is running ($in_flight), waiting 15s... ($i/60)"
+            sleep 15
+          done
+          echo "Timed out waiting for Deploy Infra to finish"
+          exit 1
+
   changes:
+    needs: wait-for-infra
     runs-on: ubuntu-latest
     outputs:
       app: ${{ steps.filter.outputs.app }}
