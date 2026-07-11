@@ -74,14 +74,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
+        with:
+          working-directory: app
       - run: uv sync
-      - run: uv run pytest -q
+        working-directory: app
+      - run: uv run pytest -q ../tests
+        working-directory: app
 
   deploy-app:
     needs: [changes, test-app]
