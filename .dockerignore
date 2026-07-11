@@ -1,0 +1,54 @@
+# API image build context is the repo root (`docker build -f app/Dockerfile .`).
+# Keep the context small: only app/ + assets/mock-tyres/release are COPY'd.
+
+# VCS / caches / envs
+.git
+.gitignore
+.venv
+venv
+env
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+.env.*
+.DS_Store
+.claude
+
+# Other services and infra — not part of the API image
+web
+3d-reconstructor
+infra
+.github
+docs
+docker-compose.yml
+README.md
+notebooks
+scripts
+gradio-app
+workspace
+
+# Tests aren't needed at runtime
+tests
+
+# Mock-tyre authoring trees; release/ is copied explicitly in the Dockerfile
+assets/mock-tyres/raw
+assets/mock-tyres/annotations
+assets/mock-tyres/cut
+assets/mock-tyres/__pycache__
+assets/mock-tyres/*.py
+
+# Heavy local frames — served from S3 via mock_tyres_s3_manifest.json at runtime
+assets/mock-tyres/release/**/*.png
+
+# Heavy research artifacts — not needed to serve the API.
+# CORE_TABLES parquet files (fleets, aircraft, tires, …) are included for fleet endpoints.
+app/tire_rul/data/_ground_truth.parquet
+app/tire_rul/data/scans/
+app/tire_rul/artifacts/mixedlm.pkl
+app/tire_rul/artifacts/lightgbm.txt
+app/tire_rul/artifacts/weibull_aft.pkl
+app/tire_rul/artifacts/shap_values.parquet
+app/tire_rul/artifacts/eval_report.json

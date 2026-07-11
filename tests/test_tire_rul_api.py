@@ -322,3 +322,24 @@ async def test_enrich_fleet_scans_rejects_concurrent_run(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "ENRICH_IN_PROGRESS"
+
+
+@pytest.mark.asyncio
+async def test_enrich_fleet_scans_surfaces_missing_assets(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(*, seed: int = 20260712) -> Any:
+        raise FileNotFoundError(
+            "Mock-tyre scan packs missing for 1h233b under /app/assets/mock-tyres/release; "
+            "bake assets/mock-tyres/release into the image (see app/Dockerfile)."
+        )
+
+    monkeypatch.setattr("app.api.routes.tire_rul.enrich_tires", boom)
+    response = await client.post("/api/v1/tire_rul/fleet/enrich-scans")
+
+    assert response.status_code == 503
+    body = response.json()["error"]
+    assert body["code"] == "FLEET_DATA_UNAVAILABLE"
+    assert "Mock-tyre scan packs missing" in body["message"]
+    assert "make data" not in body["message"]

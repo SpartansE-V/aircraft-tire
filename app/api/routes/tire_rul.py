@@ -251,12 +251,12 @@ def enrich_fleet_scans(
                     "Enriching tire scan packs needs the AI stack (`uv sync --extra ai`)."
                 )
             )
-        except FileNotFoundError:
-            return _fleet_unavailable_response(
-                AgentDataUnavailableError(
-                    "Fleet dataset not found; run `make data` before enrich-scans."
-                )
+        except FileNotFoundError as exc:
+            detail = str(exc).strip() or (
+                "Fleet dataset or mock-tyre assets not found; "
+                "run `make data` locally or bake assets/mock-tyres/release into the image."
             )
+            return _fleet_unavailable_response(AgentDataUnavailableError(detail))
         except AgentDataUnavailableError as exc:
             return _fleet_unavailable_response(exc)
 
