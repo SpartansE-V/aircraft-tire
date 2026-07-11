@@ -1,6 +1,6 @@
 # Canonical tire-assessment API
 
-`POST /api/tire-assessments` is the primary interface for the demonstration model. One request
+`POST /api/v1/tire-assessments` is the primary interface for the demonstration model. One request
 contains measured tire condition, bounded future operating assumptions, and forecast controls.
 
 The representative-cycle and future results share the same inputs, preventing inconsistent results

@@ -10,7 +10,7 @@ from httpx import AsyncClient
 
 from app.services.tire_assessor import tire_assessor
 
-ASSESSMENT_URL = "/api/tire-assessments"
+ASSESSMENT_URL = "/api/v1/tire-assessments"
 
 
 @pytest.mark.asyncio
@@ -91,6 +91,7 @@ async def test_assessment_contract_is_documented_without_private_coefficients(
     assert response.status_code == 200
     document = response.json()
     assert ASSESSMENT_URL in document["paths"]
+    assert "/api/tire-assessments" not in document["paths"]
     assert "/api/v1/wear-severity/calculate" not in document["paths"]
     assert "/api/v2/tire-profiles" not in document["paths"]
     assert "/api/v2/tire-simulations" not in document["paths"]
@@ -107,6 +108,7 @@ async def test_assessment_contract_is_documented_without_private_coefficients(
 @pytest.mark.parametrize(
     ("method", "path"),
     [
+        ("POST", "/api/tire-assessments"),
         ("POST", "/api/v1/wear-severity/calculate"),
         ("GET", "/api/v2/tire-profiles"),
         ("POST", "/api/v2/tire-simulations"),

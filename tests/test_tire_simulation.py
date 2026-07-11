@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from httpx import AsyncClient
 
-ASSESSMENT_URL = "/api/tire-assessments"
+ASSESSMENT_URL = "/api/v1/tire-assessments"
 
 
 @pytest.mark.asyncio

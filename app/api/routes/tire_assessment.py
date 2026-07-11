@@ -6,7 +6,7 @@ from app.api.errors import ErrorResponse
 from app.domain.assessment_schemas import TireAssessmentRequest, TireAssessmentResponse
 from app.services.tire_assessor import tire_assessor
 
-router = APIRouter(prefix="/api", tags=["Tire Assessment"])
+router = APIRouter(prefix="/api/v1", tags=["Tire Assessment"])
 
 
 @router.post(

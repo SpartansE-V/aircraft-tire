@@ -209,7 +209,7 @@ simulationForm.addEventListener("submit", async (event) => {
   setLoading(simulationResult, "Assessing current and future tire condition…");
   button.disabled = true;
   try {
-    renderSimulation(await postJSON("/api/tire-assessments", simulationPayload(simulationForm)));
+    renderSimulation(await postJSON("/api/v1/tire-assessments", simulationPayload(simulationForm)));
   } catch (error) {
     setError(simulationResult, error);
   } finally {
