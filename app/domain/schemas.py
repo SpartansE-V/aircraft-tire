@@ -188,3 +188,111 @@ class RootResponse(StrictSchema):
 
 class HealthResponse(StrictSchema):
     status: str
+
+
+class ModelPrediction(StrictSchema):
+    x: float = Field(description="Bounding-box centre x-coordinate in pixels.")
+    y: float = Field(description="Bounding-box centre y-coordinate in pixels.")
+    width: float = Field(description="Bounding-box width in pixels.")
+    height: float = Field(description="Bounding-box height in pixels.")
+    confidence: float = Field(ge=0.0, le=1.0, description="Model confidence score.")
+    class_name: str = Field(
+        alias="class",
+        description="Detected class label.",
+    )
+    class_id: int = Field(description="Numeric class identifier from the model.")
+    detection_id: str = Field(description="Unique identifier for the detection.")
+
+
+class TyreQualityPrediction(ModelPrediction):
+    class_name: str = Field(
+        alias="class",
+        description="Detected tyre-quality class label.",
+    )
+
+
+class TyreQualityResponse(StrictSchema):
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "predictions": [
+                        {
+                            "x": 321,
+                            "y": 273,
+                            "width": 622,
+                            "height": 472,
+                            "confidence": 0.824,
+                            "class": "bad_tyre",
+                            "class_id": 0,
+                            "detection_id": "ea4dce18-94eb-4c4a-a358-4bb8b860d0fb",
+                        }
+                    ]
+                }
+            ]
+        },
+    )
+
+    predictions: list[TyreQualityPrediction] = Field(
+        description="YOLO detections returned by the Roboflow model.",
+    )
+
+
+class TreadDepthPrediction(ModelPrediction):
+    class_name: str = Field(
+        alias="class",
+        description="Detected tread-depth class label (e.g. '7-8 mm').",
+    )
+
+
+class TreadDepthResponse(StrictSchema):
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "predictions": [
+                        {
+                            "x": 2019,
+                            "y": 1285.5,
+                            "width": 4026,
+                            "height": 397,
+                            "confidence": 0.832,
+                            "class": "7-8 mm",
+                            "class_id": 6,
+                            "detection_id": "0d34376c-a32b-4811-9bd9-9b0c68937207",
+                        },
+                        {
+                            "x": 2016,
+                            "y": 1781.5,
+                            "width": 4000,
+                            "height": 531,
+                            "confidence": 0.749,
+                            "class": "7-8 mm",
+                            "class_id": 6,
+                            "detection_id": "3332d823-6752-41c3-aeb5-334ef0296d2c",
+                        },
+                        {
+                            "x": 2017,
+                            "y": 729,
+                            "width": 4026,
+                            "height": 518,
+                            "confidence": 0.55,
+                            "class": "7-8 mm",
+                            "class_id": 6,
+                            "detection_id": "b100d76d-0d93-4de9-a7eb-e08a660da31a",
+                        },
+                    ]
+                }
+            ]
+        },
+    )
+
+    predictions: list[TreadDepthPrediction] = Field(
+        description="YOLO detections returned by the tread-depth Roboflow model.",
+    )

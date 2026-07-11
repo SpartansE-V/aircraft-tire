@@ -14,10 +14,12 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 
 from app.api.errors import install_error_handlers, internal_error_response
+from app.api.routes.crack_detector import router as crack_detector_router
 from app.api.routes.demo import router as demo_router
 from app.api.routes.health import router as health_router
 from app.api.routes.tire_assessment import router as tire_assessment_router
 from app.api.routes.tire_simulation import router as tire_simulation_router
+from app.api.routes.tread_depth import router as tread_depth_router
 from app.api.routes.wear_severity import router as wear_severity_router
 from app.config import Settings, get_settings
 from app.domain.schemas import RootResponse
@@ -104,6 +106,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(tire_assessment_router)
     application.include_router(wear_severity_router)
     application.include_router(tire_simulation_router)
+    application.include_router(crack_detector_router)
+    application.include_router(tread_depth_router)
     application.include_router(demo_router)
     application.mount("/demo-assets", StaticFiles(directory=STATIC_DIR), name="demo-assets")
     return application
