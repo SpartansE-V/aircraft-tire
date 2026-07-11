@@ -65,8 +65,9 @@ compile:
 
 check: format-check lint type-check test compile
 
+# Context is the repo root so assets/mock-tyres/release is baked into the image.
 docker-build:
-	docker build -t wear-severity-api .
+	docker build -f Dockerfile -t wear-severity-api ..
 
 docker-up:
 	docker compose up --build -d

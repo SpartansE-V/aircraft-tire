@@ -19,13 +19,18 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY --from=uv /uv /uvx /bin/
-COPY pyproject.toml uv.lock ./
+
+# Build context is the repo root (`docker build -f app/Dockerfile .`).
+COPY app/pyproject.toml app/uv.lock ./
 RUN uv sync --frozen --no-dev --extra ai
 
 # app/ carries the code plus the RUL endpoint's runtime inputs — scoring thresholds
 # (app/tire_rul/config/) and the fitted population prior (app/tire_rul/artifacts/mixedlm_covariance.pkl,
 # 386 B). Training data and heavy research artifacts are excluded via .dockerignore.
-COPY . ./app
+COPY app ./app
+
+# enrich-scans + crack overlays need release/*/metadata.json; image frames fall back to S3.
+COPY assets/mock-tyres/release ./assets/mock-tyres/release
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app
