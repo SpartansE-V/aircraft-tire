@@ -1,7 +1,8 @@
 [project]
-name = "wear-severity-api"
+name = "aircraft-tire-assessment-api"
 version = "1.0.0"
-description = "Aircraft tire wear-severity calculator API"
+description = "Fail-closed aircraft tire assessment and scenario-planning API"
+readme = "docs/tire-assessment-api.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "fastapi>=0.115.0,<1.0.0",
@@ -14,7 +15,6 @@ dependencies = [
     "uvicorn[standard]>=0.34.0,<1.0.0",
     # Runtime for the RUL AI endpoint (app.tire_rul.scoring is pure-numpy; config loads YAML).
     "numpy>=1.26,<2.1",
-    "pyyaml>=6.0,<7.0",
 ]
 
 [project.optional-dependencies]

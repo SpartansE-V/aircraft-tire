@@ -11,6 +11,17 @@ from httpx import AsyncClient
 ASSESSMENT_URL = "/api/v1/tire-assessments"
 
 
+def _mode_probability(body: dict[str, object], mode: str) -> float:
+    risk = body["unscheduled_removal_risk"]
+    assert isinstance(risk, dict)
+    modes = risk["modes"]
+    assert isinstance(modes, list)
+    result = next(item for item in modes if isinstance(item, dict) and item["mode"] == mode)
+    probability = result["synthetic_probability_pct"]
+    assert isinstance(probability, float)
+    return probability
+
+
 @pytest.mark.asyncio
 async def test_successful_simulation_has_safe_response_semantics(
     client: AsyncClient,
@@ -25,7 +36,17 @@ async def test_successful_simulation_has_safe_response_semantics(
     assert body["gear"] == "main"
     assert body["random_seed"] == 42
     assert body["approved_limits"]["status"] == "NOT_AVAILABLE"
-    assert body["unscheduled_removal_risk"]["status"] == "NOT_MODELED"
+    assert body["approved_limits"]["demonstration_planning_threshold_mm"] == 1.0
+    assert body["approved_limits"]["basis"] == "SYNTHETIC_PILOT_ASSUMPTION"
+    risk = body["unscheduled_removal_risk"]
+    assert risk["status"] == "SYNTHETIC_DEMONSTRATION"
+    assert risk["horizon_cycles"] == 50
+    assert risk["confidence"] == "LOW"
+    assert risk["probability_interpretation"] == "NOT_EMPIRICAL_FAILURE_PROBABILITY"
+    assert 0 <= risk["synthetic_probability_pct"] <= 100
+    assert len(risk["modes"]) == 8
+    assert all(0 <= mode["synthetic_probability_pct"] <= 100 for mode in risk["modes"])
+    assert all(1 <= len(mode["drivers"]) <= 3 for mode in risk["modes"])
     assert body["confidence"]["level"] == "LOW"
     assert "does not provide certified limits" in body["disclaimer"]
     assert 0 <= body["forecast"]["probability_threshold_within_horizon"] <= 1
@@ -46,6 +67,102 @@ async def test_same_seed_produces_same_numeric_result(
     second["representative_cycle"]["result"].pop("calculation_id")
 
     assert first == second
+
+
+@pytest.mark.asyncio
+async def test_synthetic_removal_probability_increases_with_horizon(
+    client: AsyncClient,
+    simulation_payload: dict[str, object],
+) -> None:
+    shorter_payload = copy.deepcopy(simulation_payload)
+    shorter_payload["horizon_cycles"] = 25
+
+    shorter = (await client.post(ASSESSMENT_URL, json=shorter_payload)).json()
+    baseline = (await client.post(ASSESSMENT_URL, json=simulation_payload)).json()
+
+    assert (
+        shorter["unscheduled_removal_risk"]["synthetic_probability_pct"]
+        < baseline["unscheduled_removal_risk"]["synthetic_probability_pct"]
+    )
+    for mode in (
+        "FOD_DAMAGE",
+        "CUT_OR_EXPOSED_CORD",
+        "BULGE",
+        "TREAD_SEPARATION",
+        "HEAT_DAMAGE",
+        "FLAT_SPOT",
+        "CONTAMINATION",
+        "SUDDEN_PRESSURE_LOSS",
+    ):
+        assert _mode_probability(shorter, mode) < _mode_probability(baseline, mode)
+
+
+@pytest.mark.asyncio
+async def test_synthetic_removal_probability_tracks_primary_proxy_drivers(
+    client: AsyncClient,
+    simulation_payload: dict[str, object],
+) -> None:
+    low_proxy_payload = copy.deepcopy(simulation_payload)
+    low_condition = low_proxy_payload["current_condition"]
+    assert isinstance(low_condition, dict)
+    low_condition.update(
+        cycles_since_install=0,
+        retread_count=0,
+        tire_temperature_c=30.0,
+    )
+    high_proxy_payload = copy.deepcopy(low_proxy_payload)
+    high_condition = high_proxy_payload["current_condition"]
+    assert isinstance(high_condition, dict)
+    high_condition.update(
+        cycles_since_install=500,
+        retread_count=3,
+        tire_temperature_c=120.0,
+    )
+    low = (await client.post(ASSESSMENT_URL, json=low_proxy_payload)).json()
+    high = (await client.post(ASSESSMENT_URL, json=high_proxy_payload)).json()
+
+    assert low["forecast"] == high["forecast"]
+    for mode in (
+        "BULGE",
+        "TREAD_SEPARATION",
+        "HEAT_DAMAGE",
+        "SUDDEN_PRESSURE_LOSS",
+    ):
+        assert _mode_probability(low, mode) < _mode_probability(high, mode)
+
+
+@pytest.mark.asyncio
+async def test_synthetic_removal_probability_tracks_operating_condition_drivers(
+    client: AsyncClient,
+    simulation_payload: dict[str, object],
+) -> None:
+    low_payload = copy.deepcopy(simulation_payload)
+    low_future = low_payload["future_conditions"]
+    assert isinstance(low_future, dict)
+    low_future["runway_condition"] = "DRY"
+    low_future["heavy_braking_probability"] = 0.0
+    low_future["brake_temperature_c"] = {
+        "minimum": 200.0,
+        "most_likely": 200.0,
+        "maximum": 200.0,
+    }
+
+    high_payload = copy.deepcopy(low_payload)
+    high_future = high_payload["future_conditions"]
+    assert isinstance(high_future, dict)
+    high_future["runway_condition"] = "ROUGH"
+    high_future["heavy_braking_probability"] = 1.0
+    high_future["brake_temperature_c"] = {
+        "minimum": 600.0,
+        "most_likely": 600.0,
+        "maximum": 600.0,
+    }
+
+    low = (await client.post(ASSESSMENT_URL, json=low_payload)).json()
+    high = (await client.post(ASSESSMENT_URL, json=high_payload)).json()
+
+    for mode in ("FOD_DAMAGE", "HEAT_DAMAGE", "FLAT_SPOT", "CONTAMINATION"):
+        assert _mode_probability(low, mode) < _mode_probability(high, mode)
 
 
 @pytest.mark.asyncio
@@ -112,9 +229,22 @@ async def test_known_defect_requires_qualified_inspection(
     condition["known_defects"] = ["BULGE"]
     response = await client.post(ASSESSMENT_URL, json=simulation_payload)
 
+    assert response.status_code == 409
     body = response.json()
-    assert body["current_condition"]["status"] == "QUALIFIED_INSPECTION_REQUIRED"
-    assert body["recommendation"]["attention"] == "QUALIFIED_INSPECTION_REQUIRED"
+    assert body["error"]["code"] == "ASSESSMENT_WITHHELD"
+    assert body["error"]["details"] == [
+        {
+            "field": "current_condition.known_defects",
+            "message": "Observed defects: BULGE.",
+        },
+        {
+            "field": "required_action",
+            "message": (
+                "Qualified physical inspection using approved maintenance data is required."
+            ),
+        },
+    ]
+    assert "forecast" not in body
 
 
 @pytest.mark.asyncio
@@ -130,7 +260,7 @@ async def test_nose_profile_uses_nose_gear(
 
 
 @pytest.mark.asyncio
-async def test_planning_threshold_has_zero_remaining_cycles(
+async def test_planning_threshold_withholds_numeric_forecast(
     client: AsyncClient,
     simulation_payload: dict[str, object],
 ) -> None:
@@ -139,14 +269,10 @@ async def test_planning_threshold_has_zero_remaining_cycles(
     condition["current_tread_depth_mm"] = 1.0
     response = await client.post(ASSESSMENT_URL, json=simulation_payload)
 
+    assert response.status_code == 409
     body = response.json()
-    assert body["current_condition"]["status"] == "PLANNING_THRESHOLD_REACHED"
-    assert body["forecast"]["cycles_to_planning_threshold"] == {
-        "p10": 0,
-        "p50": 0,
-        "p90": 0,
-    }
-    assert body["forecast"]["probability_threshold_within_horizon"] == 1.0
+    assert body["error"]["code"] == "ASSESSMENT_WITHHELD"
+    assert "forecast" not in body
 
 
 @pytest.mark.asyncio

@@ -81,6 +81,92 @@ wheels = [
 ]
 
 [[package]]
+name = "aircraft-tire-assessment-api"
+version = "1.0.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "inference-sdk" },
+    { name = "numpy" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.optional-dependencies]
+ai = [
+    { name = "anthropic", extra = ["bedrock"] },
+    { name = "lifelines" },
+    { name = "lightgbm" },
+    { name = "numpy" },
+    { name = "openai" },
+    { name = "pandas" },
+    { name = "pillow" },
+    { name = "plotly" },
+    { name = "pyarrow" },
+    { name = "pyyaml" },
+    { name = "scipy" },
+    { name = "shap" },
+    { name = "statsmodels" },
+    { name = "streamlit" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "anthropic", extra = ["bedrock"] },
+    { name = "httpx" },
+    { name = "mypy" },
+    { name = "openai" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+    { name = "types-pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "anthropic", extras = ["bedrock"], marker = "extra == 'ai'", specifier = ">=0.40" },
+    { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
+    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
+    { name = "inference-sdk", specifier = ">=0.9.0,<1.0.0" },
+    { name = "lifelines", marker = "extra == 'ai'", specifier = ">=0.27" },
+    { name = "lightgbm", marker = "extra == 'ai'", specifier = ">=4.1" },
+    { name = "numpy", specifier = ">=1.26,<2.1" },
+    { name = "numpy", marker = "extra == 'ai'", specifier = ">=1.26,<2.1" },
+    { name = "openai", marker = "extra == 'ai'", specifier = ">=1.30" },
+    { name = "pandas", marker = "extra == 'ai'", specifier = ">=2.0,<2.3" },
+    { name = "pillow", marker = "extra == 'ai'", specifier = ">=10.0" },
+    { name = "plotly", marker = "extra == 'ai'", specifier = ">=5.18" },
+    { name = "pyarrow", marker = "extra == 'ai'", specifier = ">=14" },
+    { name = "pydantic", specifier = ">=2.10.0,<3.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.7.0,<3.0.0" },
+    { name = "python-multipart", specifier = ">=0.0.20,<1.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.0,<7.0.0" },
+    { name = "pyyaml", marker = "extra == 'ai'", specifier = ">=6.0,<7.0" },
+    { name = "scipy", marker = "extra == 'ai'", specifier = ">=1.11" },
+    { name = "shap", marker = "extra == 'ai'", specifier = ">=0.44" },
+    { name = "statsmodels", marker = "extra == 'ai'", specifier = ">=0.14" },
+    { name = "streamlit", marker = "extra == 'ai'", specifier = ">=1.49" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
+]
+provides-extras = ["ai"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "anthropic", extras = ["bedrock"], specifier = ">=0.40" },
+    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
+    { name = "mypy", specifier = ">=1.14.0,<2.0.0" },
+    { name = "openai", specifier = ">=1.30" },
+    { name = "pytest", specifier = ">=8.3.0,<10.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.25.0,<2.0.0" },
+    { name = "ruff", specifier = ">=0.9.0,<1.0.0" },
+    { name = "types-pyyaml", specifier = ">=6.0.0,<7.0.0" },
+]
+
+[[package]]
 name = "altair"
 version = "6.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2155,92 +2241,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/53/fd/2e812bf938406d7db351f0703ddd3fc6c061cf30d96153a77bc79a943a44/watchfiles-1.2.0-cp313-cp313t-manylinux_2_31_riscv64.whl", hash = "sha256:20aa0e708b920bde876a4aa82dc7dd6ebea228a63a67cda6632c2fc87b787efa", size = 463537, upload-time = "2026-05-18T04:31:44.9Z" },
     { url = "https://files.pythonhosted.org/packages/86/56/d17a7f1dd1bc3035f1072694a551301272f1739c2d8e319c927cb9e29b38/watchfiles-1.2.0-cp313-cp313t-musllinux_1_1_aarch64.whl", hash = "sha256:d413349d565dab74297f2a63e84a097936be69bf8f3b3801f27f380e32040f44", size = 629194, upload-time = "2026-05-18T04:31:14.141Z" },
     { url = "https://files.pythonhosted.org/packages/be/06/f1ff66bf5cae50aa4062779a0ecd0bbaf15e466195719074078947d9a17d/watchfiles-1.2.0-cp313-cp313t-musllinux_1_1_x86_64.whl", hash = "sha256:f28b2725eb8cce327b9b3ab02415c853011dc55c95832fe90de6bc56f5315f72", size = 656194, upload-time = "2026-05-18T04:31:47.14Z" },
-]
-
-[[package]]
-name = "wear-severity-api"
-version = "1.0.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "inference-sdk" },
-    { name = "numpy" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "python-multipart" },
-    { name = "pyyaml" },
-    { name = "uvicorn", extra = ["standard"] },
-]
-
-[package.optional-dependencies]
-ai = [
-    { name = "anthropic", extra = ["bedrock"] },
-    { name = "lifelines" },
-    { name = "lightgbm" },
-    { name = "numpy" },
-    { name = "openai" },
-    { name = "pandas" },
-    { name = "pillow" },
-    { name = "plotly" },
-    { name = "pyarrow" },
-    { name = "pyyaml" },
-    { name = "scipy" },
-    { name = "shap" },
-    { name = "statsmodels" },
-    { name = "streamlit" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "anthropic", extra = ["bedrock"] },
-    { name = "httpx" },
-    { name = "mypy" },
-    { name = "openai" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-    { name = "types-pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "anthropic", extras = ["bedrock"], marker = "extra == 'ai'", specifier = ">=0.40" },
-    { name = "fastapi", specifier = ">=0.115.0,<1.0.0" },
-    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
-    { name = "inference-sdk", specifier = ">=0.9.0,<1.0.0" },
-    { name = "lifelines", marker = "extra == 'ai'", specifier = ">=0.27" },
-    { name = "lightgbm", marker = "extra == 'ai'", specifier = ">=4.1" },
-    { name = "numpy", specifier = ">=1.26,<2.1" },
-    { name = "numpy", marker = "extra == 'ai'", specifier = ">=1.26,<2.1" },
-    { name = "openai", marker = "extra == 'ai'", specifier = ">=1.30" },
-    { name = "pandas", marker = "extra == 'ai'", specifier = ">=2.0,<2.3" },
-    { name = "pillow", marker = "extra == 'ai'", specifier = ">=10.0" },
-    { name = "plotly", marker = "extra == 'ai'", specifier = ">=5.18" },
-    { name = "pyarrow", marker = "extra == 'ai'", specifier = ">=14" },
-    { name = "pydantic", specifier = ">=2.10.0,<3.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.7.0,<3.0.0" },
-    { name = "python-multipart", specifier = ">=0.0.20,<1.0.0" },
-    { name = "pyyaml", specifier = ">=6.0,<7.0" },
-    { name = "pyyaml", marker = "extra == 'ai'", specifier = ">=6.0,<7.0" },
-    { name = "scipy", marker = "extra == 'ai'", specifier = ">=1.11" },
-    { name = "shap", marker = "extra == 'ai'", specifier = ">=0.44" },
-    { name = "statsmodels", marker = "extra == 'ai'", specifier = ">=0.14" },
-    { name = "streamlit", marker = "extra == 'ai'", specifier = ">=1.49" },
-    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0,<1.0.0" },
-]
-provides-extras = ["ai"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "anthropic", extras = ["bedrock"], specifier = ">=0.40" },
-    { name = "httpx", specifier = ">=0.28.0,<1.0.0" },
-    { name = "mypy", specifier = ">=1.14.0,<2.0.0" },
-    { name = "openai", specifier = ">=1.30" },
-    { name = "pytest", specifier = ">=8.3.0,<10.0.0" },
-    { name = "pytest-asyncio", specifier = ">=0.25.0,<2.0.0" },
-    { name = "ruff", specifier = ">=0.9.0,<1.0.0" },
-    { name = "types-pyyaml", specifier = ">=6.0.0,<7.0.0" },
 ]
 
 [[package]]

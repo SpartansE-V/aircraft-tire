@@ -1,6 +1,6 @@
-"""Public contracts for the demonstration-only v2 tire simulator."""
+"""Scenario inputs and outputs composed by the v1 tire-assessment API."""
 
-from typing import ClassVar, Literal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import ConfigDict, Field, model_validator
@@ -44,7 +44,7 @@ class RangeDistribution(StrictSchema):
 
 class CurrentTireCondition(StrictSchema):
     cycles_since_install: int = Field(ge=0, le=100_000)
-    current_tread_depth_mm: float = Field(ge=1.0, le=10.9, allow_inf_nan=False)
+    current_tread_depth_mm: float = Field(ge=0.0, le=100.0, allow_inf_nan=False)
     measured_cold_pressure_psi: float = Field(gt=0, le=500, allow_inf_nan=False)
     reference_cold_pressure_psi: float = Field(gt=0, le=500, allow_inf_nan=False)
     tire_temperature_c: float = Field(ge=-60, le=150, allow_inf_nan=False)
@@ -54,18 +54,6 @@ class CurrentTireCondition(StrictSchema):
 
 class FutureOperatingConditions(StrictSchema):
     model_config = ConfigDict(strict=True, extra="forbid")
-
-    DISTRIBUTION_BOUNDS: ClassVar[dict[str, tuple[float, float]]] = {
-        "landing_weight_kg": (50_000.0, 73_500.0),
-        "touchdown_ground_speed_ms": (58.0, 82.0),
-        "crosswind_kt": (0.0, 25.0),
-        "touchdown_sink_rate_ms": (0.0, 4.0),
-        "touchdown_yaw_angle_deg": (0.0, 15.0),
-        "taxi_distance_km": (0.5, 8.0),
-        "average_taxi_speed_kt": (0.0, 30.0),
-        "outside_air_temperature_c": (5.0, 45.0),
-        "brake_temperature_c": (0.0, 600.0),
-    }
 
     landing_weight_kg: RangeDistribution
     touchdown_ground_speed_ms: RangeDistribution
@@ -78,14 +66,6 @@ class FutureOperatingConditions(StrictSchema):
     brake_temperature_c: RangeDistribution
     heavy_braking_probability: float = Field(ge=0, le=1, allow_inf_nan=False)
     runway_condition: RunwayCondition
-
-    @model_validator(mode="after")
-    def validate_distribution_bounds(self) -> "FutureOperatingConditions":
-        for field_name, (minimum, maximum) in self.DISTRIBUTION_BOUNDS.items():
-            distribution = getattr(self, field_name)
-            if distribution.minimum < minimum or distribution.maximum > maximum:
-                raise ValueError(f"{field_name} must remain between {minimum:g} and {maximum:g}")
-        return self
 
 
 class TireSimulationRequest(StrictSchema):
@@ -187,6 +167,8 @@ class SimulationProfileCatalog(StrictSchema):
 
 class ApprovedLimitEvaluation(StrictSchema):
     status: Literal["NOT_AVAILABLE"]
+    demonstration_planning_threshold_mm: float = Field(ge=0, allow_inf_nan=False)
+    basis: Literal["SYNTHETIC_PILOT_ASSUMPTION"]
     message: str
 
 
@@ -221,8 +203,40 @@ class PressurePolicyComparison(StrictSchema):
     estimated_median_cycle_difference: int
 
 
+ModelFactorField = Literal["cycles_since_install", "retread_count", "tire_temperature_c"]
+
+
+class ModelFactorUsage(StrictSchema):
+    field: ModelFactorField
+    wear_forecast: Literal["RECORDED_NOT_USED"]
+    removal_demo: Literal["USED_AS_SYNTHETIC_PROXY"]
+
+
+RemovalMode = Literal[
+    "FOD_DAMAGE",
+    "CUT_OR_EXPOSED_CORD",
+    "BULGE",
+    "TREAD_SEPARATION",
+    "HEAT_DAMAGE",
+    "FLAT_SPOT",
+    "CONTAMINATION",
+    "SUDDEN_PRESSURE_LOSS",
+]
+
+
+class SyntheticRemovalModeRisk(StrictSchema):
+    mode: RemovalMode
+    synthetic_probability_pct: float = Field(ge=0, le=100, allow_inf_nan=False)
+    drivers: list[str] = Field(min_length=1, max_length=3)
+
+
 class UnscheduledRemovalRisk(StrictSchema):
-    status: Literal["NOT_MODELED"]
+    status: Literal["SYNTHETIC_DEMONSTRATION"]
+    horizon_cycles: int = Field(ge=1, le=500)
+    synthetic_probability_pct: float = Field(ge=0, le=100, allow_inf_nan=False)
+    modes: list[SyntheticRemovalModeRisk] = Field(min_length=8, max_length=8)
+    confidence: Literal["LOW"]
+    probability_interpretation: Literal["NOT_EMPIRICAL_FAILURE_PROBABILITY"]
     message: str
 
 
@@ -250,6 +264,7 @@ class TireSimulationResponse(StrictSchema):
     wear_forecast: WearForecast
     pressure_policy_comparison: PressurePolicyComparison
     unscheduled_removal_risk: UnscheduledRemovalRisk
+    model_factor_usage: list[ModelFactorUsage] = Field(min_length=3, max_length=3)
     scenario_drivers: list[str]
     recommendation: SimulationRecommendation
     confidence: SimulationConfidence
