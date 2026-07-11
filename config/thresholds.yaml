@@ -1,0 +1,41 @@
+# TreadCast model/alert thresholds. These are the demo sliders' defaults — the
+# Streamlit sidebar reads this same block so operators can tune live.
+version: "1.0"
+
+wear_limit_mm: 2.0            # must match generator tire.wear_limit_mm
+planning_window_days: 30      # alert if earliest-credible wear-to-limit date falls inside this
+p_cross_threshold: 0.20       # alert if P(cross before next check) exceeds this
+wear_accel_threshold: 0.30    # alert if a tire's wear rate accelerates >30% vs its own baseline
+
+mc_draws: 2000                # Monte Carlo (intercept, slope) samples for first-passage crossing
+mc_seed: 20240115             # fixed so wear-to-limit date bands are reproducible
+
+next_check_interval_cycles: 25    # cycles until the next scheduled inspection opportunity
+low_confidence_min_readings: 3    # fewer readings than this -> "fleet prior — low confidence"
+utilization_trailing_days: 30     # window for deriving landings/day per tail
+default_cycles_per_day: 4.5       # fallback utilization when a tail has no recent history
+
+# Priority = P(cross before next check) x consequence weight. NOT a raw RUL sort.
+priority:
+  position_criticality:
+    nlg_l: 0.85
+    nlg_r: 0.85
+    mlg_l_inbd: 1.00
+    mlg_l_outbd: 1.00
+    mlg_r_inbd: 1.00
+    mlg_r_outbd: 1.00
+  utilization_weight: 0.50       # weight on tail AOG-exposure (utilization) in consequence
+  spare_shortage_weight: 0.50    # weight on station spare unavailability in consequence
+  hard_landing_multiplier: 1.15  # boost if recent hard landings
+  pressure_ladder_multiplier: 1.25  # boost if a pressure-ladder rule is active
+
+# Goodyear/FAA cold-pressure action ladder, as % of loaded service pressure.
+# Evaluated top-to-bottom; first band whose [min_pct, max_pct) contains the reading wins.
+pressure_ladder:
+  bands:
+    - { min_pct: 100.0, max_pct: 106.0, action: "ok" }
+    - { min_pct: 95.0,  max_pct: 100.0, action: "reinflate" }
+    - { min_pct: 90.0,  max_pct: 95.0,  action: "inspect" }
+    - { min_pct: 80.0,  max_pct: 90.0,  action: "remove" }
+    - { min_pct: 0.0,   max_pct: 80.0,  action: "remove_tire_and_mate" }
+  recurring_loss_pct_24h: 5.0    # a tire/wheel may lose up to 5%/24h; recurring beyond -> remove
