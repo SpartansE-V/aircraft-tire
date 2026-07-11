@@ -4,7 +4,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "craft-detector-service/**"
+      - "app/**"
+      - "tests/**"
+      - "config/**"
+      - "artifacts/mixedlm_covariance.pkl"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - ".dockerignore"
       - "3d-reconstructor/**"
       - "web/**"
   workflow_dispatch: {}
@@ -63,7 +70,14 @@ jobs:
         with:
           filters: |
             app:
-              - 'craft-detector-service/**'
+              - 'app/**'
+              - 'tests/**'
+              - 'config/**'
+              - 'artifacts/mixedlm_covariance.pkl'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'Dockerfile'
+              - '.dockerignore'
             reconstructor:
               - '3d-reconstructor/**'
             web:
@@ -73,14 +87,34 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: craft-detector-service
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync
-      - run: uv run pytest -q
+
+      - name: Verify dependency lock
+        run: uv lock --check
+
+      - name: Check formatting
+        run: uv run ruff format --check app tests
+
+      - name: Lint application and tests
+        run: uv run ruff check app tests
+
+      - name: Type-check application
+        run: uv run mypy app
+
+      - name: Verify model evidence and calibration contracts
+        run: >-
+          uv run pytest
+          tests/test_model_registry.py
+          tests/test_calibration_dataset.py
+          tests/test_calibration_validation.py
+          tests/test_physical_benchmark.py
+          -q
+
+      - name: Run test suite
+        run: uv run pytest -q
 
   deploy-app:
     needs: [changes, test-app]

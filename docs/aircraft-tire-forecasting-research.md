@@ -268,7 +268,7 @@ The simulator should accept a planned sequence or distribution of future operati
 distribution of possible condition trajectories. It must cap or reject scenarios outside the model's
 validated domain and independently flag any approved-limit exceedance.
 
-Example scenario input:
+Future product-contract example (not the current `/api/v1/tire-assessments` schema):
 
 ```json
 {
@@ -317,7 +317,8 @@ Example output:
 }
 ```
 
-The numeric example illustrates an API shape only; it is not a validated aircraft-tire prediction.
+The numeric example illustrates a possible future API shape only; it is neither the current endpoint
+contract nor a validated aircraft-tire prediction.
 
 ## 9. Validation and governance
 
@@ -361,7 +362,8 @@ The numeric example illustrates an API shape only; it is not a validated aircraf
 - Versioned approved-limit/document registry.
 - Manual inspection capture with pressure, thermal context, tread, images, defects, and tool calibration.
 - Deterministic rules and audit log.
-- Keep the existing wear-severity endpoint explicitly labeled as an unvalidated scenario demonstrator.
+- Keep `/api/v1/tire-assessments` explicitly restricted to its uncalibrated, scenario-planning
+  lifecycle until target data and controlled authorization exist.
 
 ### Phase 1 — useful production pilot
 
@@ -387,17 +389,17 @@ The numeric example illustrates an API shape only; it is not a validated aircraf
 
 ## 11. Gap analysis against the current API
 
-The current API is appropriate as a hackathon **relative severity calculator**, but it is not a real
-remaining-life system.
+The current API composes a relative-severity calculation with a bounded Monte Carlo scenario forecast,
+but its active release is still an uncalibrated development model, not a real remaining-life system.
 
 | Current design | Production gap | Recommended change |
 | --- | --- | --- |
-| Gear is only `main` or `nose` | No aircraft, tire part number, wheel position, axle mate, serial, construction, or retread history | Introduce aircraft, wheel-position, and tire-asset resources |
+| Active release uses generic `main`/`nose` profiles; request asset identity is optional | No server-resolved aircraft/tire/wheel applicability, axle mate, serial history, or controlled installation configuration | Introduce controlled aircraft, wheel-position, and tire-asset resources and require an exact release-target match |
 | Landing weight stands in for tire load | Actual wheel loads depend on CG, gear geometry, load sharing, and operational reactions. [EASA CS 25.733](https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publications/easy-access-rules-large-aeroplanes-cs-25?page=25) | Use approved load derivation or ingest a validated per-wheel load proxy |
-| Crosswind stands in for lateral work | Tire damage relates more directly to yaw/slip/scrub and turning behavior. [Dunlop DM1172](https://www.dunlopaircrafttyres.co.uk/media/1265/dunlop-tcmm-dm1172-issue-11.pdf) | Add yaw/slip, turn, towing, and lateral-acceleration features where available |
-| User enters underinflation percentage | No measured pressure, rated target, hot/cold context, temperature, leak history, sensor, or calibration | Store raw observations and derive normalized pressure condition |
+| Crosswind and caller-supplied yaw ranges stand in for lateral work | Tire damage relates more directly to measured yaw/slip/scrub and turning behavior. [Dunlop DM1172](https://www.dunlopaircrafttyres.co.uk/media/1265/dunlop-tcmm-dm1172-issue-11.pdf) | Ingest calibrated yaw/slip, turn, towing, and lateral-acceleration exposure where available |
+| Request includes measured/reference pressure but treats both as caller assertions | No approved target resolver, reliable hot/cold context, leak history, sensor identity, or calibration provenance | Store raw observations and resolve the approved cold target server-side before operational use |
 | Fixed tread-life assumptions | Skid depth and limits vary with tire/application and approved maintenance data. [Goodyear DataBook](https://www.goodyearaviation.com/resources/tiredatabook.html) | Read versioned tire/aircraft-specific baselines and thresholds |
-| One deterministic point result | No uncertainty, applicability, data quality, or model calibration | Return distributions, confidence, versions, and limitations |
+| Monte Carlo ranges use an assumed uncertainty parameter | No empirical interval calibration, target applicability, data-quality score, temporal validation, or outcome validation | Calibrate distributions on training casings and test coverage, threshold timing, and probability calibration on a frozen holdout |
 | Wear-only estimate | FOD, cuts, pressure loss, heat, flat spots, and separation cause premature removal. [FAA AC 20-97B](https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC20-97B.pdf) | Separate wear-out forecast from competing unscheduled-removal risks |
 | Stateless request | Real RUL requires longitudinal measurements and outcomes | Add persistent event history, provenance, corrections, and audit trails |
 

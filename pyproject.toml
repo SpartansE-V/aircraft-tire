@@ -1,0 +1,114 @@
+[project]
+name = "aircraft-tire-assessment-api"
+version = "1.0.0"
+description = "Fail-closed aircraft tire assessment and scenario-planning API"
+readme = "docs/tire-assessment-api.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "httpx>=0.28.0,<1.0.0",
+    "inference-sdk>=0.9.0,<1.0.0",
+    "pydantic>=2.10.0,<3.0.0",
+    "pydantic-settings>=2.7.0,<3.0.0",
+    "python-multipart>=0.0.20,<1.0.0",
+    "pyyaml>=6.0.0,<7.0.0",
+    "uvicorn[standard]>=0.34.0,<1.0.0",
+    # Runtime for the RUL AI endpoint (app.tire_rul.scoring is pure-numpy; config loads YAML).
+    "numpy>=1.26,<2.1",
+]
+
+[project.optional-dependencies]
+# Full AI/ML stack: data generation, model training, CV, the LLM agent, and the Streamlit UI.
+# NOT needed to serve /api/v1/tire_rul/predict (that path only needs numpy + pyyaml, in base deps).
+# Install with: `uv sync --extra ai`.
+ai = [
+    "numpy>=1.26,<2.1",
+    "pyyaml>=6.0,<7.0",
+    "pandas>=2.0,<2.3",
+    "pyarrow>=14",
+    "scipy>=1.11",
+    "statsmodels>=0.14",
+    "lifelines>=0.27",
+    "lightgbm>=4.1",
+    "shap>=0.44",
+    "plotly>=5.18",
+    "streamlit>=1.49",
+    "pillow>=10.0",
+    "openai>=1.30",
+    "anthropic[bedrock]>=0.40",
+]
+
+[dependency-groups]
+dev = [
+    "anthropic[bedrock]>=0.40",
+    "httpx>=0.28.0,<1.0.0",
+    "mypy>=1.14.0,<2.0.0",
+    "openai>=1.30",
+    "pytest>=8.3.0,<10.0.0",
+    "pytest-asyncio>=0.25.0,<2.0.0",
+    "ruff>=0.9.0,<1.0.0",
+    "types-PyYAML>=6.0.0,<7.0.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# Sibling services in this monorepo have their own toolchains and styles — the
+# main app's lint/format only covers app/ and tests/.
+extend-exclude = ["3d-reconstructor", "web", "infra"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+# The AI research-pipeline tests are vendored at the AI package's original 120-char style
+# (see app/tire_rul/ruff.toml). Backend tests follow the root style.
+[tool.ruff.lint.per-file-ignores]
+"tests/test_agent.py" = ["E501"]
+"tests/test_cv.py" = ["E501"]
+"tests/test_evaluation.py" = ["E501"]
+"tests/test_features.py" = ["E501"]
+"tests/test_generator.py" = ["E501"]
+"tests/test_grounding.py" = ["E501"]
+"tests/test_scoring.py" = ["E501"]
+
+[tool.ruff.format]
+exclude = [
+    "app/tire_rul/**",
+    "tests/test_agent.py",
+    "tests/test_cv.py",
+    "tests/test_evaluation.py",
+    "tests/test_features.py",
+    "tests/test_generator.py",
+    "tests/test_grounding.py",
+    "tests/test_scoring.py",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+pretty = true
+show_error_codes = true
+# The backend (app.main/api/domain/services/config) is strict-typed. app.tire_rul is vendored
+# research/ML code with a different quality bar — excluded from strict checks below.
+exclude = ["^app/tire_rul/"]
+
+[[tool.mypy.overrides]]
+# Do not strict-check the AI package, and treat its symbols as untyped when imported
+# from the backend seam (app.services.tire_rul_service).
+module = ["app.tire_rul.*"]
+ignore_errors = true
+follow_imports = "skip"
+
+[[tool.mypy.overrides]]
+module = ["inference_sdk.*", "pandas.*"]
+ignore_missing_imports = true

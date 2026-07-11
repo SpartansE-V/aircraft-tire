@@ -1,0 +1,54 @@
+schema_version: "1.0"
+release_id: pilot-sim-2.0.0
+lifecycle: DEVELOPMENT
+intended_uses:
+  - SCENARIO_PLANNING
+parameters:
+  path: parameters.json
+  sha256: 403d3bf6c47071fb804dc714371a4ac6853f06650ce17f094bafc09f90bfdacf
+implementation:
+  implementation_id: pilot-physics-simulation-2.0.0
+  source_paths:
+    - calibration/artifacts.py
+    - calibration/dataset.py
+    - calibration/physical_benchmark.py
+    - calibration/promotion.py
+    - calibration/schemas.py
+    - calibration/validation.py
+    - domain/assessment_schemas.py
+    - domain/governance_schemas.py
+    - domain/model_parameter_schemas.py
+    - domain/schemas.py
+    - domain/simulation_schemas.py
+    - services/assessment_gate.py
+    - services/model_config.py
+    - services/model_registry.py
+    - services/safety_policy.py
+    - services/tire_assessor.py
+    - services/tire_simulator.py
+    - services/wear_calculator.py
+  sha256: f37354fa95bc57ad2fbccd16bb68b64c4f476db7be70ac9830817a12f37c68cc
+supporting_evidence:
+  - evidence_id: nasa-tp-3626-ittv-table4
+    path: evidence/nasa-tp-3626-ittv-table4.json
+    sha256: 1c499db6c7fa0463f3a58856d6a8decb02378a9d23fdc8596482233178b0a943
+    source_kind: PHYSICAL_TEST
+    applicability: NON_TARGET_BENCHMARK
+    use: QUALITATIVE_OR_SUBMODEL_RESEARCH_ONLY
+target_identity: null
+calibration:
+  status: NOT_PERFORMED
+  dataset: null
+  report: null
+validation:
+  status: NOT_PERFORMED
+  holdout_dataset: null
+  report: null
+  metrics_acceptance: null
+authorization:
+  status: NOT_AUTHORIZED
+  controlled_documents: []
+  approver: null
+  effective_at: null
+  expires_at: null
+  permitted_uses: []
