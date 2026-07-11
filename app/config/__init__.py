@@ -8,7 +8,7 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-CONFIG_PATH = Path(__file__).resolve().parent / "config" / "config.yaml"
+CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 
 
 class RoboflowModelSettings(BaseModel):
