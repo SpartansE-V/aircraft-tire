@@ -32,6 +32,34 @@ DISCLAIMER = (
 )
 
 
+def _wear_exposure_multiplier(request: TireRulPredictionRequest) -> float:
+    """Combine normalized flight factors with wheel-position sensitivities.
+
+    Exponents prevent double-counting correlated factors and encode physical allocation: braking
+    loads the mains most, taxi steering loads the nose, and crosswind/lateral exposure loads the
+    outboard mains most. The safety bound avoids an implausible product dominating the posterior.
+    """
+
+    c = request.flight_conditions
+    is_nose = request.position.startswith("nlg")
+    is_outboard = request.position.endswith("outbd")
+    braking_weight = 0.35 if is_nose else 1.0
+    taxi_weight = 1.0 if is_nose else 0.55
+    crosswind_weight = 0.4 if is_nose else (1.0 if is_outboard else 0.6)
+    multiplier = (
+        c.landing_load_factor
+        * c.braking_energy_factor**braking_weight
+        * c.takeoff_severity_factor**0.45
+        * c.taxi_heat_factor**taxi_weight
+        * c.temperature_factor**0.35
+        * c.inflation_factor
+        * c.runway_roughness_factor**0.6
+        * c.hard_landing_factor
+        * c.crosswind_factor**crosswind_weight
+    )
+    return float(np.clip(multiplier, 0.25, 6.0))
+
+
 @lru_cache(maxsize=1)
 def _load_prior() -> dict[str, Any]:
     """Load the fitted population degradation prior (per-position params + covariance + scale)."""
@@ -59,6 +87,8 @@ class TireRulService:
         cycles = np.array([r.cycles_since_install for r in request.readings], dtype=float)
         grooves = np.array([r.measured_groove_mm for r in request.readings], dtype=float)
         n_readings = len(request.readings)
+        exposure_multiplier = _wear_exposure_multiplier(request)
+        effective_planned_landings = request.planned_landings * exposure_multiplier
 
         prior_mean, prior_cov, scale = scoring.prior_arrays(prior, request.position)
         estimate = scoring.estimate_wheel(
@@ -67,7 +97,7 @@ class TireRulService:
             prior_mean,
             prior_cov,
             scale,
-            current_cycles=request.current_cycles,
+            current_cycles=request.current_cycles + effective_planned_landings,
             landings_per_day=request.landings_per_day,
             as_of_date=as_of,
             limit_mm=thresholds.wear_limit_mm,
@@ -105,6 +135,8 @@ class TireRulService:
             ),
             p_cross_before_next_check=round(estimate.p_cross_next_check, 4),
             landings_per_day=request.landings_per_day,
+            wear_exposure_multiplier=round(exposure_multiplier, 3),
+            effective_planned_landings=round(effective_planned_landings, 1),
             readings_used=n_readings,
             low_confidence=estimate.low_confidence,
             status=TireRulStatus(
