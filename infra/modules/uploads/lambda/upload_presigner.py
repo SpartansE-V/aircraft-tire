@@ -113,13 +113,13 @@ def _image_type(content: bytes) -> str | None:
 
 
 def _text_field(
-    payload: Mapping[str, Any], key: str, *, required: bool = False, max_length: int = 128
+    payload: Mapping[str, Any], key: str, *, max_length: int = 128
 ) -> str | None:
     value = payload.get(key)
-    if value is None and not required:
+    if value is None:
         return None
     if not isinstance(value, str) or not value.strip():
-        raise RequestError(f"{key} is required." if required else f"{key} must be text.")
+        raise RequestError(f"{key} must be text.")
     value = value.strip()
     if len(value) > max_length:
         raise RequestError(f"{key} cannot exceed {max_length} characters.")
@@ -127,11 +127,12 @@ def _text_field(
 
 
 def _aircraft_metadata(payload: Mapping[str, Any]) -> dict[str, str]:
-    aircraft_id = _text_field(payload, "aircraftId", required=True)
-    assert aircraft_id is not None
-    metadata = {"aircraft_id": aircraft_id}
+    metadata: dict[str, str] = {}
+    aircraft_id = _text_field(payload, "aircraftId")
     tail_number = _text_field(payload, "tailNumber", max_length=32)
     wheel_position = _text_field(payload, "wheelPosition", max_length=64)
+    if aircraft_id:
+        metadata["aircraft_id"] = aircraft_id
     if tail_number:
         metadata["tail_number"] = tail_number
     if wheel_position:
@@ -218,7 +219,6 @@ def _create_image_record(
     timestamp = _now()
     item = {
         "image_id": {"S": _image_id(key)},
-        "aircraft_id": {"S": metadata["aircraft_id"]},
         "s3_bucket": {"S": UPLOAD_BUCKET},
         "s3_key": {"S": key},
         "original_filename": {"S": filename},
@@ -227,7 +227,7 @@ def _create_image_record(
         "created_at": {"S": timestamp},
         "updated_at": {"S": timestamp},
     }
-    for name in ("tail_number", "wheel_position"):
+    for name in ("aircraft_id", "tail_number", "wheel_position"):
         if value := metadata.get(name):
             item[name] = {"S": value}
     if size_bytes is not None:
@@ -304,11 +304,18 @@ def _upload_image(event: Mapping[str, Any]) -> dict[str, Any]:
         version_id=uploaded.get("VersionId"),
         size_bytes=len(content),
     )
+    presigned_url = s3.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": UPLOAD_BUCKET, "Key": key},
+        ExpiresIn=URL_EXPIRATION_SECS,
+    )
     return {
         "imageId": image_id,
         "key": key,
         "etag": uploaded.get("ETag"),
         "versionId": uploaded.get("VersionId"),
+        "presignedUrl": presigned_url,
+        "expiresIn": URL_EXPIRATION_SECS,
     }
 
 

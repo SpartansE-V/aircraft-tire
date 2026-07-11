@@ -153,6 +153,13 @@ data "aws_iam_policy_document" "upload_presigner_s3" {
   }
 
   statement {
+    sid       = "ReadUploadObjects"
+    effect    = "Allow"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.uploads.arn}/uploads/*"]
+  }
+
+  statement {
     sid    = "WriteImageMetadata"
     effect = "Allow"
     actions = [
@@ -185,9 +192,9 @@ resource "aws_lambda_function" "upload_presigner" {
   filename         = data.archive_file.upload_presigner.output_path
   source_code_hash = data.archive_file.upload_presigner.output_base64sha256
 
-  memory_size                    = 128
-  timeout                        = 10
-  reserved_concurrent_executions = 10
+  memory_size = 128
+  timeout     = 10
+  # reserved_concurrent_executions removed - account quota too low
 
   environment {
     variables = {
