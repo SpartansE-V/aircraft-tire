@@ -3,9 +3,8 @@
 `POST /api/tire-assessments` is the primary interface for the demonstration model. One request
 contains measured tire condition, bounded future operating assumptions, and forecast controls.
 
-The older v1 severity and v2 simulation routes remain available for compatibility, but new clients
-should use the canonical assessment route so the representative-cycle and future results share the
-same inputs.
+The representative-cycle and future results share the same inputs, preventing inconsistent results
+from separate severity and simulation requests.
 
 ## Input
 

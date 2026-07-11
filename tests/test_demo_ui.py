@@ -10,9 +10,10 @@ async def test_demo_page_is_available(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Single-cycle severity" in response.text
     assert "Complete tire assessment" in response.text
     assert "POST /api/tire-assessments" in response.text
+    assert "/api/v1/wear-severity" not in response.text
+    assert "/api/v2/" not in response.text
     assert "Decision support only" in response.text
 
 

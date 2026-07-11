@@ -3,9 +3,7 @@
 const $ = (selector, parent = document) => parent.querySelector(selector);
 const $$ = (selector, parent = document) => [...parent.querySelectorAll(selector)];
 
-const severityForm = $("#severity-form");
 const simulationForm = $("#simulation-form");
-const severityResult = $("#severity-result");
 const simulationResult = $("#simulation-result");
 
 const presets = {
@@ -56,20 +54,6 @@ function escapeHTML(value) {
     .replaceAll("'", "&#039;");
 }
 
-function setTab(name, scroll = true) {
-  $$("[data-tab]").forEach((button) => {
-    const active = button.dataset.tab === name;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", String(active));
-  });
-  $$(".tab-panel").forEach((panel) => {
-    panel.hidden = panel.id !== `${name}-panel`;
-  });
-  if (scroll) {
-    $("#lab-heading").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-}
-
 function setLoading(container, message) {
   container.innerHTML = `
     <div class="loading-state">
@@ -102,56 +86,6 @@ async function postJSON(url, payload) {
     throw body;
   }
   return body;
-}
-
-function severityStatusClass(level) {
-  if (level === "CRITICAL" || level === "HIGH") return "critical";
-  if (level === "MODERATE") return "warning";
-  return "";
-}
-
-function renderSeverity(data) {
-  const severity = data.severity;
-  const pressureMessage = data.pressure_effect.warning
-    ? data.pressure_effect.message
-    : "No pressure warning for this scenario.";
-  severityResult.innerHTML = `
-    <div class="result-content">
-      <div class="result-head">
-        <div><p>Single-cycle result</p><h3>${escapeHTML(data.gear_label)}</h3></div>
-        <span class="status-pill ${severityStatusClass(severity.level)}">${escapeHTML(severity.level)}</span>
-      </div>
-      <div class="metric-grid">
-        <div class="metric">
-          <span>Severity index</span><strong>${escapeHTML(severity.index)}</strong>
-          <small>${escapeHTML(severity.label)}</small>
-        </div>
-        <div class="metric">
-          <span>Estimated wear</span><strong>${escapeHTML(data.estimated_wear_rate_mm_per_cycle)}</strong>
-          <small>mm per modeled cycle</small>
-        </div>
-        <div class="metric">
-          <span>Demo tread life</span><strong>${escapeHTML(data.estimated_total_tread_life_cycles)}</strong>
-          <small>total modeled cycles, not remaining life</small>
-        </div>
-        <div class="metric">
-          <span>Pressure effect</span><strong>${escapeHTML(data.pressure_effect.multiplier)}×</strong>
-          <small>${escapeHTML(pressureMessage)}</small>
-        </div>
-      </div>
-      <div class="recommendation-card">
-        <strong>${escapeHTML(data.recommendation.attention)}</strong>
-        <p>${escapeHTML(data.recommendation.message)}</p>
-      </div>
-      <div class="guardrail-card">
-        <strong>Interpretation</strong>
-        <p>Use v1 to compare one operating scenario with another. It does not know the physical tire's current condition.</p>
-      </div>
-      <details class="raw-details">
-        <summary>View raw API response</summary>
-        <pre>${escapeHTML(JSON.stringify(data, null, 2))}</pre>
-      </details>
-    </div>`;
 }
 
 function boundedRange(center, spread, minimum, maximum) {
@@ -269,30 +203,6 @@ function renderSimulation(data) {
     </div>`;
 }
 
-severityForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const button = $('button[type="submit"]', severityForm);
-  const data = new FormData(severityForm);
-  const payload = {
-    gear: data.get("gear"),
-    touchdown_speed_ms: numberValue(data, "touchdown_speed_ms"),
-    landing_weight_kg: numberValue(data, "landing_weight_kg"),
-    crosswind_kt: numberValue(data, "crosswind_kt"),
-    taxi_distance_km: numberValue(data, "taxi_distance_km"),
-    outside_air_temperature_c: numberValue(data, "outside_air_temperature_c"),
-    under_inflation_pct: numberValue(data, "under_inflation_pct"),
-  };
-  setLoading(severityResult, "Calculating one-cycle severity…");
-  button.disabled = true;
-  try {
-    renderSeverity(await postJSON("/api/v1/wear-severity/calculate", payload));
-  } catch (error) {
-    setError(severityResult, error);
-  } finally {
-    button.disabled = false;
-  }
-});
-
 simulationForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = $('button[type="submit"]', simulationForm);
@@ -305,14 +215,6 @@ simulationForm.addEventListener("submit", async (event) => {
   } finally {
     button.disabled = false;
   }
-});
-
-$$('[data-open-tab]').forEach((button) => {
-  button.addEventListener("click", () => setTab(button.dataset.openTab));
-});
-
-$$('[data-tab]').forEach((button) => {
-  button.addEventListener("click", () => setTab(button.dataset.tab, false));
 });
 
 $$('[data-preset]').forEach((button) => {

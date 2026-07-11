@@ -18,13 +18,11 @@ from app.api.routes.crack_detector import router as crack_detector_router
 from app.api.routes.demo import router as demo_router
 from app.api.routes.health import router as health_router
 from app.api.routes.tire_assessment import router as tire_assessment_router
-from app.api.routes.tire_simulation import router as tire_simulation_router
 from app.api.routes.tread_depth import router as tread_depth_router
-from app.api.routes.wear_severity import router as wear_severity_router
 from app.config import Settings, get_settings
 from app.domain.schemas import RootResponse
 
-SERVICE_NAME = "Aircraft Tire Wear Severity Calculator"
+SERVICE_NAME = "Aircraft Tire Assessment API"
 SERVICE_VERSION = "1.0.0"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -42,10 +40,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=SERVICE_NAME,
         version=SERVICE_VERSION,
         description=(
-            "Estimate aircraft-tire wear severity for main-gear and nose-gear tires from "
-            "operating conditions. Severity categories support inspection planning only. "
-            "Results do not replace physical inspection, aircraft maintenance manuals, or "
-            "qualified engineering approval."
+            "Assess current and future aircraft-tire condition from measured condition and "
+            "bounded operating assumptions. Results support inspection planning only and do not "
+            "replace physical inspection, approved maintenance data, or engineering approval."
         ),
         docs_url="/docs",
         redoc_url=None,
@@ -104,8 +101,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(health_router)
     application.include_router(tire_assessment_router)
-    application.include_router(wear_severity_router)
-    application.include_router(tire_simulation_router)
     application.include_router(crack_detector_router)
     application.include_router(tread_depth_router)
     application.include_router(demo_router)

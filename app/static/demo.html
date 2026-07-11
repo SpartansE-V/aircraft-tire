@@ -37,12 +37,9 @@
             severity, forecast ranges, pressure comparison, drivers, and guidance together.
           </p>
           <div class="hero-actions">
-            <button class="button button-primary" type="button" data-open-tab="simulation">
+            <a class="button button-primary" href="#lab-heading">
               Run complete assessment
-            </button>
-            <button class="button button-secondary" type="button" data-open-tab="severity">
-              Open legacy quick check
-            </button>
+            </a>
           </div>
         </div>
         <div class="hero-visual" aria-hidden="true">
@@ -66,22 +63,14 @@
           <h2 id="choose-heading">Start with the complete tire picture</h2>
         </div>
         <div class="choice-grid">
-          <button class="choice-card" type="button" data-open-tab="simulation">
+          <a class="choice-card" href="#lab-heading">
             <span class="choice-number">01</span>
             <span class="choice-copy">
               <strong>Assess current and future condition</strong>
               <small>One canonical request returns severity, forecast, pressure policy, and guidance.</small>
             </span>
             <span class="choice-arrow" aria-hidden="true">→</span>
-          </button>
-          <button class="choice-card" type="button" data-open-tab="severity">
-            <span class="choice-number">02</span>
-            <span class="choice-copy">
-              <strong>Need only a quick comparison?</strong>
-              <small>The original one-cycle route remains available as a compatibility interface.</small>
-            </span>
-            <span class="choice-arrow" aria-hidden="true">→</span>
-          </button>
+          </a>
         </div>
       </section>
 
@@ -91,107 +80,9 @@
             <p class="eyebrow">Interactive workspace</p>
             <h2 id="lab-heading">Run the assessment</h2>
           </div>
-          <div class="tabs" role="tablist" aria-label="API demonstrations">
-            <button
-              id="severity-tab"
-              class="tab"
-              type="button"
-              role="tab"
-              aria-selected="false"
-              aria-controls="severity-panel"
-              data-tab="severity"
-            >
-              Legacy · One cycle
-            </button>
-            <button
-              id="simulation-tab"
-              class="tab active"
-              type="button"
-              role="tab"
-              aria-selected="true"
-              aria-controls="simulation-panel"
-              data-tab="simulation"
-            >
-              Recommended · Complete assessment
-            </button>
-          </div>
         </div>
 
-        <section
-          id="severity-panel"
-          class="tab-panel"
-          role="tabpanel"
-          aria-labelledby="severity-tab"
-          hidden
-        >
-          <div class="panel-grid">
-            <form id="severity-form" class="input-panel">
-              <div class="panel-intro">
-                <span class="api-label">POST /api/v1/wear-severity/calculate</span>
-                <h3>Single-cycle severity</h3>
-                <p>Change one condition at a time to see which operating factors raise severity.</p>
-              </div>
-
-              <fieldset class="gear-picker">
-                <legend>Gear position</legend>
-                <label>
-                  <input type="radio" name="gear" value="main" checked />
-                  <span><strong>Main gear</strong><small>Higher demo baseline</small></span>
-                </label>
-                <label>
-                  <input type="radio" name="gear" value="nose" />
-                  <span><strong>Nose gear</strong><small>Lower demo baseline</small></span>
-                </label>
-              </fieldset>
-
-              <div class="form-grid">
-                <label class="field">
-                  <span>Touchdown speed <b>m/s</b></span>
-                  <input name="touchdown_speed_ms" type="number" min="58" max="82" step="0.1" value="69" required />
-                </label>
-                <label class="field">
-                  <span>Landing weight <b>kg</b></span>
-                  <input name="landing_weight_kg" type="number" min="50000" max="73500" step="100" value="62000" required />
-                </label>
-                <label class="field">
-                  <span>Crosswind <b>kt</b></span>
-                  <input name="crosswind_kt" type="number" min="0" max="25" step="0.1" value="6" required />
-                </label>
-                <label class="field">
-                  <span>Taxi distance <b>km</b></span>
-                  <input name="taxi_distance_km" type="number" min="0.5" max="8" step="0.1" value="2.8" required />
-                </label>
-                <label class="field">
-                  <span>Outside temperature <b>°C</b></span>
-                  <input name="outside_air_temperature_c" type="number" min="5" max="45" step="0.1" value="30" required />
-                </label>
-                <label class="field">
-                  <span>Under-inflation <b>%</b></span>
-                  <input name="under_inflation_pct" type="number" min="0" max="10" step="0.1" value="0" required />
-                </label>
-              </div>
-
-              <button class="button button-primary button-wide" type="submit">
-                Calculate one-cycle severity
-              </button>
-            </form>
-
-            <div id="severity-result" class="result-panel" aria-live="polite">
-              <div class="empty-state">
-                <span class="empty-icon">01</span>
-                <h3>Ready for a single cycle</h3>
-                <p>Submit the example to see severity, wear rate, pressure effect, and guidance.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section
-          id="simulation-panel"
-          class="tab-panel"
-          role="tabpanel"
-          aria-labelledby="simulation-tab"
-        >
+        <section id="simulation-panel" class="tab-panel">
           <div class="panel-grid panel-grid-simulation">
             <form id="simulation-form" class="input-panel">
               <div class="panel-intro">
