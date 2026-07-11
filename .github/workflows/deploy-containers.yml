@@ -103,6 +103,18 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
+      - uses: astral-sh/setup-uv@v3
+        with:
+          working-directory: app
+
+      # Deterministic (fixed seed). Rewrites tires.parquet scan columns so the
+      # image always ships fleet /tyres data — needs assets/mock-tyres/*/metadata.json.
+      - name: Enrich tire scan packs
+        working-directory: app
+        run: |
+          uv sync --frozen --extra ai
+          PYTHONPATH=.. uv run python -m app.tire_rul.enrich_tire_assets
+
       - name: Build and push image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}

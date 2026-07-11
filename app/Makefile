@@ -1,9 +1,6 @@
-.PHONY: install install-ai run run-api run-web ui data enrich-scans sync-mock-tyres scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
+.PHONY: install install-ai run run-api run-web ui data enrich-scans scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
 
 WEB_DIR := ../web
-# Package imports are `app.*`; the uv project lives in this directory, so the repo
-# root (parent) must be on PYTHONPATH when running modules from here.
-export PYTHONPATH := ..
 
 # --- Backend (API) ---
 install:
@@ -25,16 +22,15 @@ install-ai:
 	uv sync --extra ai
 
 ui:
-	uv run streamlit run ../app/tire_rul/app.py
+	uv run streamlit run app/tire_rul/app.py
 
 data:
 	uv run python -m app.tire_rul.generate_data
 
+# Idempotent with the default seed; rewrites scan columns on tires.parquet.
+# Needs ../assets/mock-tyres/release/*/metadata.json (JSON only, not the PNGs).
 enrich-scans:
-	uv run python -m app.tire_rul.enrich_tire_assets
-
-sync-mock-tyres:
-	uv run python ../scripts/sync_mock_tyres_s3.py
+	PYTHONPATH=.. uv run python -m app.tire_rul.enrich_tire_assets
 
 scans:
 	uv run python -m app.tire_rul.generate_scans
@@ -58,10 +54,10 @@ format-check:
 	uv run ruff format --check .
 
 type-check:
-	uv run mypy .
+	uv run mypy app
 
 compile:
-	uv run python -m compileall .
+	uv run python -m compileall app
 
 check: format-check lint type-check test compile
 
