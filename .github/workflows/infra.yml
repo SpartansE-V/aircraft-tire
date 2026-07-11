@@ -1,0 +1,68 @@
+name: Deploy Infra
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  terraform-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      # Infra-only changes must not touch what's currently deployed, so we
+      # re-pass the image tags already running instead of falling back to
+      # each variable's "latest" default (which was never pushed - the ECR
+      # repos are tag-immutable - and would replace the running task defs).
+      - name: Resolve currently deployed image tags
+        id: current-tags
+        run: |
+          app_image=$(aws ecs describe-task-definition \
+            --task-definition aircraft-tire \
+            --query 'taskDefinition.containerDefinitions[0].image' --output text 2>/dev/null) || app_image=""
+          reconstructor_image=$(aws ecs describe-task-definition \
+            --task-definition aircraft-tire-3d-reconstructor \
+            --query 'taskDefinition.containerDefinitions[0].image' --output text 2>/dev/null) || reconstructor_image=""
+
+          app_tag="${app_image##*:}"
+          reconstructor_tag="${reconstructor_image##*:}"
+
+          echo "app_tag=${app_tag:-latest}" >> "$GITHUB_OUTPUT"
+          echo "reconstructor_tag=${reconstructor_tag:-latest}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform apply
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -var="image_tag_app=${{ steps.current-tags.outputs.app_tag }}" \
+            -var="image_tag_reconstructor=${{ steps.current-tags.outputs.reconstructor_tag }}"
+
+      - name: Publish endpoints to job summary
+        working-directory: infra
+        run: |
+          echo "### Infra applied :building_construction:" >> "$GITHUB_STEP_SUMMARY"
+          terraform output -json alb_dns_names | jq -r 'to_entries[] | "- \(.key): \(.value)"' >> "$GITHUB_STEP_SUMMARY"

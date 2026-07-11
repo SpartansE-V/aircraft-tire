@@ -1,14 +1,3 @@
-resource "aws_ecs_cluster" "main" {
-  name = "${var.project_name}-cluster"
-
-  setting {
-    name  = "containerInsights"
-    value = "enabled"
-  }
-
-  tags = var.tags
-}
-
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.project_name}"
   retention_in_days = 30
@@ -92,10 +81,7 @@ resource "aws_ecs_task_definition" "app" {
         containerPort = var.container_port
         protocol      = "tcp"
       }]
-      environment = [
-        { name = "PORT", value = tostring(var.container_port) },
-        { name = "CORS_ORIGINS", value = var.cors_origins },
-      ]
+      environment = var.environment
       logConfiguration = {
         logDriver = "awslogs"
         options = {
@@ -113,7 +99,7 @@ resource "aws_ecs_task_definition" "app" {
 
 resource "aws_ecs_service" "app" {
   name            = "${var.project_name}-service"
-  cluster         = aws_ecs_cluster.main.id
+  cluster         = var.cluster_id
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.desired_count
   launch_type     = "FARGATE"
@@ -148,7 +134,7 @@ resource "aws_ecs_service" "app" {
 resource "aws_appautoscaling_target" "app" {
   max_capacity       = 10
   min_capacity       = var.desired_count
-  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.app.name}"
+  resource_id        = "service/${var.cluster_name}/${aws_ecs_service.app.name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }

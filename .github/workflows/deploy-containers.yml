@@ -1,0 +1,139 @@
+name: Deploy Containers
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "craft-detector-service/**"
+      - "3d-reconstructor/**"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+      reconstructor: ${{ steps.filter.outputs.reconstructor }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            app:
+              - 'craft-detector-service/**'
+            reconstructor:
+              - '3d-reconstructor/**'
+
+  test-app:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: craft-detector-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run pytest -q
+
+  deploy-app:
+    needs: [changes, test-app]
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/aircraft-tire:${{ github.sha }}" craft-detector-service
+          docker push "$REGISTRY/aircraft-tire:${{ github.sha }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Deploy app service
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -target='module.ecs["app"]' \
+            -var="image_tag_app=${{ github.sha }}"
+
+  test-reconstructor:
+    needs: changes
+    if: needs.changes.outputs.reconstructor == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 3d-reconstructor
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+
+  deploy-reconstructor:
+    needs: [changes, test-reconstructor]
+    if: needs.changes.outputs.reconstructor == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/aircraft-tire-3d-reconstructor:${{ github.sha }}" 3d-reconstructor
+          docker push "$REGISTRY/aircraft-tire-3d-reconstructor:${{ github.sha }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Deploy reconstructor service
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -target='module.ecs["reconstructor"]' \
+            -var="image_tag_reconstructor=${{ github.sha }}"

@@ -11,18 +11,6 @@ variable "github_repo" {
   type        = string
 }
 
-variable "ecr_repository_arn" {
-  type = string
-}
-
-variable "execution_role_arn" {
-  type = string
-}
-
-variable "task_role_arn" {
-  type = string
-}
-
 variable "tfstate_bucket" {
   type = string
 }
