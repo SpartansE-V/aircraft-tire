@@ -188,3 +188,47 @@ class RootResponse(StrictSchema):
 
 class HealthResponse(StrictSchema):
     status: str
+
+
+class TyreQualityPrediction(StrictSchema):
+    x: float = Field(description="Bounding-box centre x-coordinate in pixels.")
+    y: float = Field(description="Bounding-box centre y-coordinate in pixels.")
+    width: float = Field(description="Bounding-box width in pixels.")
+    height: float = Field(description="Bounding-box height in pixels.")
+    confidence: float = Field(ge=0.0, le=1.0, description="Model confidence score.")
+    class_name: str = Field(
+        alias="class",
+        description="Detected tyre-quality class label.",
+    )
+    class_id: int = Field(description="Numeric class identifier from the model.")
+    detection_id: str = Field(description="Unique identifier for the detection.")
+
+
+class TyreQualityResponse(StrictSchema):
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        populate_by_name=True,
+        json_schema_extra={
+            "examples": [
+                {
+                    "predictions": [
+                        {
+                            "x": 321,
+                            "y": 273,
+                            "width": 622,
+                            "height": 472,
+                            "confidence": 0.824,
+                            "class": "bad_tyre",
+                            "class_id": 0,
+                            "detection_id": "ea4dce18-94eb-4c4a-a358-4bb8b860d0fb",
+                        }
+                    ]
+                }
+            ]
+        },
+    )
+
+    predictions: list[TyreQualityPrediction] = Field(
+        description="YOLO detections returned by the Roboflow model.",
+    )
