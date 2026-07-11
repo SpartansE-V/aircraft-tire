@@ -7,6 +7,17 @@ locals {
   tfstate_bucket     = "aircraft-tire-tfstate-442147575477"
   tfstate_key_prefix = "aircraft-tire"
   tfstate_lock_table = "aircraft-tire-tfstate-lock"
+  uploads_bucket     = "aircraft-tire-uploads-442147575477"
+
+  app_environment = [
+    { name = "PORT", value = "8000" },
+    { name = "CORS_ORIGINS", value = var.cors_origins },
+  ]
+
+  app_service_environment = var.openai_api_key != "" ? concat(
+    local.app_environment,
+    [{ name = "OPENAI_API_KEY", value = var.openai_api_key }]
+  ) : local.app_environment
 
   # One entry per deployable container (its own Dockerfile), sharing the
   # VPC and ECS cluster below but each getting its own ECR repo, ALB, and
@@ -24,10 +35,7 @@ locals {
       launch_type        = "FARGATE"
       gpu_count          = 0
       enable_autoscaling = true
-      environment = [
-        { name = "PORT", value = "8000" },
-        { name = "CORS_ORIGINS", value = var.cors_origins },
-      ]
+      environment        = local.app_service_environment
     }
     reconstructor = {
       name           = "${var.project_name}-3d-reconstructor"
@@ -41,7 +49,7 @@ locals {
       task_memory        = 8192
       desired_count      = 1
       image_tag          = var.image_tag_reconstructor
-      environment        = [] # Dockerfile ENV defaults cover COLMAP_* config.
+      environment        = []               # Dockerfile ENV defaults cover COLMAP_* config.
       health_check_path  = "/api/v1/health" # health router is mounted under api_prefix
       launch_type        = "FARGATE"
       gpu_count          = 0
@@ -135,9 +143,11 @@ module "ecs" {
 module "uploads" {
   source = "./modules/uploads"
 
-  project_name         = var.project_name
-  cors_allowed_origins = split(",", var.cors_origins)
-  tags                 = local.tags
+  bucket_name                   = local.uploads_bucket
+  project_name                  = var.project_name
+  cors_allowed_origins          = split(",", var.cors_origins)
+  presigned_url_expiration_secs = var.upload_presigned_url_expiration_secs
+  tags                          = local.tags
 }
 
 resource "aws_iam_role_policy" "task_uploads_access" {

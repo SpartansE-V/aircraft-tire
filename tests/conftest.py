@@ -3,7 +3,7 @@
 The AI research-pipeline tests (features/generator/evaluation/agent/cv) need the full ML stack
 (`uv sync --extra ai`). With only the base API dependencies installed they are skipped at
 collection so `make test` stays green for the backend. The scoring/grounding tests run either
-way — app.rul.scoring is pure numpy.
+way — app.tire_rul.scoring is pure numpy.
 
 The full synthetic dataset is generated once per session (in memory, no disk I/O) and reused
 across tests: generation is ~1s, and it exercises the real, committed generator config.
@@ -18,7 +18,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app
-from app.rul.config import get_generator_config, get_threshold_config
+from app.tire_rul.config import get_generator_config, get_threshold_config
 
 collect_ignore: list[str] = []
 if importlib.util.find_spec("pandas") is None:
@@ -49,7 +49,7 @@ def tables(gen_config: Any) -> Any:
     """All generated tables, keyed by name (fleets, aircraft, tires, ...)."""
     # Imported lazily: generate_data needs pandas (the `ai` extra), and every test that uses
     # this fixture lives in a module that is collect-ignored when pandas is absent.
-    from app.rul.generate_data import generate
+    from app.tire_rul.generate_data import generate
 
     return generate(gen_config)
 
@@ -70,6 +70,7 @@ def nominal_payload() -> dict[str, object]:
 @pytest.fixture
 def simulation_payload() -> dict[str, object]:
     return {
+        "intended_use": "SCENARIO_PLANNING",
         "profile_id": "pilot-main-v1",
         "current_condition": {
             "cycles_since_install": 94,

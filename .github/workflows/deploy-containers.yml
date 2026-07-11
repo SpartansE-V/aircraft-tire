@@ -5,15 +5,9 @@ on:
     branches: [main]
     paths:
       - "app/**"
-      - "tests/**"
-      - "config/**"
-      - "artifacts/mixedlm_covariance.pkl"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "Dockerfile"
-      - ".dockerignore"
       - "3d-reconstructor/**"
       - "web/**"
+      - ".github/workflows/**"
   workflow_dispatch: {}
 
 # Shares a concurrency group with infra.yml - both run `terraform apply`
@@ -70,14 +64,7 @@ jobs:
         with:
           filters: |
             app:
-              - 'app/**'
-              - 'tests/**'
-              - 'config/**'
-              - 'artifacts/mixedlm_covariance.pkl'
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'Dockerfile'
-              - '.dockerignore'
+              - 'craft-detector-service/**'
             reconstructor:
               - '3d-reconstructor/**'
             web:
@@ -87,6 +74,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: craft-detector-service
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
@@ -113,8 +103,9 @@ jobs:
       - name: Build and push image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          docker build -t "$REGISTRY/aircraft-tire:${{ github.sha }}" .
+          docker build --build-arg OPENAI_API_KEY="$OPENAI_API_KEY" -t "$REGISTRY/aircraft-tire:${{ github.sha }}" craft-detector-service
           docker push "$REGISTRY/aircraft-tire:${{ github.sha }}"
 
       - uses: hashicorp/setup-terraform@v3

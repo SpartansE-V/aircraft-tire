@@ -1,44 +1,40 @@
-name: colmap-api
-
-x-api-common: &api-common
-  build:
-    context: .
-    dockerfile: Dockerfile
-  image: spartans-ex/colmap-api:local
-  platform: ${DOCKER_PLATFORM:-linux/amd64}
-  environment:
-    COLMAP_BINARY: colmap
-    COLMAP_WORKSPACE_ROOT: /app/workspace
-    COLMAP_IMAGES_ROOT: ${COLMAP_IMAGES_ROOT:-/app/workspace/images}
-    COLMAP_OUTPUTS_ROOT: /app/workspace/runs
-    COLMAP_DEFAULT_CAMERA_MODEL: ${COLMAP_DEFAULT_CAMERA_MODEL:-SIMPLE_RADIAL}
-    COLMAP_DEFAULT_MATCHER: ${COLMAP_DEFAULT_MATCHER:-exhaustive}
-  volumes:
-    - ./workspace:/app/workspace
-  restart: unless-stopped
-  healthcheck:
-    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
-    interval: 30s
-    timeout: 5s
-    retries: 3
-    start_period: 20s
+name: mast3r-api
 
 services:
   api:
-    <<: *api-common
-    container_name: colmap-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spartans-ex/mast3r-api:local
+    environment:
+      MAST3R_WORKSPACE_ROOT: /app/workspace
+      MAST3R_IMAGES_ROOT: /app/workspace/images
+      MAST3R_OUTPUTS_ROOT: /app/workspace/runs
+      MAST3R_DEVICE: ${MAST3R_DEVICE:-auto}
+      MAST3R_IMAGE_SIZE: ${MAST3R_IMAGE_SIZE:-512}
+      MAST3R_OPTIM_LEVEL: ${MAST3R_OPTIM_LEVEL:-refine+depth}
+      MAST3R_MIN_CONF_THR: ${MAST3R_MIN_CONF_THR:-1.5}
+    volumes:
+      - ./workspace:/app/workspace
+      - hf-cache:/opt/hf-cache
     ports:
       - "${API_PORT:-8000}:8000"
+    restart: unless-stopped
+    # Requires the NVIDIA Container Toolkit on the host. Comment this block out
+    # to run CPU-only (much slower).
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
-  api-gpu:
-    <<: *api-common
-    container_name: colmap-api-gpu
-    profiles:
-      - gpu
-    ports:
-      - "${API_PORT:-8000}:8000"
-    gpus:
-      - driver: nvidia
-        count: all
-        capabilities:
-          - gpu
+volumes:
+  hf-cache:

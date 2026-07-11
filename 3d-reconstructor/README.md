@@ -1,153 +1,65 @@
-# COLMAP Reconstruction API
+# MASt3R Reconstruction API
 
-This folder contains a FastAPI server that wraps the `colmap` CLI and exposes reconstruction jobs over HTTP.
+FastAPI service that wraps **MASt3R** (Naver, built on DUSt3R + CroCo) and exposes
+image-to-3D reconstruction jobs over HTTP. Learning-based, so it reconstructs
+low-texture, few-image, and rotationally-symmetric scenes where classic SfM
+(COLMAP) fails to find an initial pair.
+
+> Replaces the previous COLMAP engine. Same job/upload API shape; outputs are now
+> **GLB** + dense **point maps** instead of a COLMAP sparse model + PLY.
 
 ## What it does
 
-- Checks whether `colmap` is installed and reachable.
-- Accepts reconstruction requests for an image folder inside a configured workspace.
-- Runs the COLMAP sparse pipeline by default.
-- Optionally runs dense reconstruction steps as part of the same job.
-- Keeps in-memory job status, command history, and logs for quick inspection.
-
-## Project layout
-
-```text
-3d-reconstructor/
-├── app/
-│   ├── main.py
-│   ├── config.py
-│   ├── domain.py
-│   ├── job_store.py
-│   ├── routes/
-│   ├── schemas.py
-│   └── services/
-├── compose.yaml
-├── Dockerfile
-├── requirements.txt
-└── tests/
-```
-
-## Local setup
-
-1. Create a virtual environment.
-2. Install the Python dependencies.
-3. Install COLMAP on your machine and make sure the `colmap` command is available in `PATH`.
-
-```bash
-cd /Users/nhannguyen/Documents/Projects/SpartansE-X/3d-reconstructor
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Environment variables
-
-These are optional. Defaults are shown below.
-
-```bash
-export COLMAP_BINARY=colmap
-export COLMAP_WORKSPACE_ROOT=/Users/nhannguyen/Documents/Projects/SpartansE-X/3d-reconstructor/workspace
-export COLMAP_IMAGES_ROOT=/Users/nhannguyen/Documents/Projects/SpartansE-X/3d-reconstructor/workspace/images
-export COLMAP_OUTPUTS_ROOT=/Users/nhannguyen/Documents/Projects/SpartansE-X/3d-reconstructor/workspace/runs
-export COLMAP_DEFAULT_CAMERA_MODEL=SIMPLE_RADIAL
-export COLMAP_DEFAULT_MATCHER=exhaustive
-```
-
-The server only accepts image directories that resolve under `COLMAP_WORKSPACE_ROOT`.
-
-## Run locally
-
-```bash
-cd /Users/nhannguyen/Documents/Projects/SpartansE-X/3d-reconstructor
-uvicorn app.main:app --reload
-```
-
-## Run with Docker
-
-The container expects your input images and output artifacts to live under `./workspace`, which is mounted into the container at `/app/workspace`.
-
-1. Copy the env template if you want to override defaults.
-
-```bash
-cd /Users/nhannguyen/Documents/Projects/SpartansE-X/3d-reconstructor
-cp .env.example .env
-```
-
-On Apple Silicon or any non-amd64 Docker host, the default configuration pins the image to `linux/amd64` because the official COLMAP container may not resolve to a native ARM build. If you have a native-compatible replacement image later, you can change `DOCKER_PLATFORM` in `.env`.
-
-2. Start the CPU-safe deployment.
-
-```bash
-docker compose up --build -d api
-```
-
-3. If your Docker host has NVIDIA GPU support and you want GPU-accelerated COLMAP, start the GPU profile instead.
-
-```bash
-docker compose --profile gpu up --build -d api-gpu
-```
-
-4. Check the API.
-
-```bash
-curl http://127.0.0.1:8000/api/v1/health
-curl http://127.0.0.1:8000/api/v1/colmap
-```
-
-5. Stop the deployment.
-
-```bash
-docker compose down
-```
-
-## Example request
-
-### Option A: upload images first
-
-Send files from an outside client:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/uploads/images \
-  -F "project_name=my-scene" \
-  -F "files=@/absolute/path/to/image-01.jpg" \
-  -F "files=@/absolute/path/to/image-02.jpg"
-```
-
-The response includes an `image_dir` like `images/my-scene`.
-The response also includes a server-generated `project_uuid`, and the uploaded files are stored under `images/<project_uuid>`.
-
-### Option B: reference an existing local folder
-
-Put your images under `workspace/images/my-scene/`.
-
-### Start reconstruction
-
-Then call:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/reconstructions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "project_name": "my-scene",
-    "image_dir": "images/my-scene",
-    "dense": true,
-    "matcher": "exhaustive",
-    "use_gpu": false
-  }'
-```
+- Accepts image uploads under a workspace (`POST /uploads/images`).
+- Runs MASt3R inference + sparse global alignment for a project.
+- Produces per run:
+  - `model.glb` — colored, confidence-masked point cloud (for viewing/download).
+  - `pointmaps.npz` — per-image dense 3D point map + colors + confidence + camera
+    pose/intrinsics + the resize/crop transform (used to project 2D detections into 3D).
+- Keeps in-memory job status, logs, and quality metrics.
 
 ## Endpoints
 
-- `GET /api/v1/health`
-- `GET /api/v1/colmap`
+- `GET  /api/v1/health`
+- `GET  /api/v1/runtime`  — torch/device/model info
 - `POST /api/v1/uploads/images`
-- `GET /api/v1/reconstructions`
-- `GET /api/v1/reconstructions/{job_id}`
-- `POST /api/v1/reconstructions`
+- `POST /api/v1/reconstructions`  — body: `{project_id, image_size?, min_conf_thr?, optim_level?, scene_graph?, shared_intrinsics?}`
+- `GET  /api/v1/reconstructions` / `/{job_id}`
+- `GET  /api/v1/reconstructions/{job_id}/model.glb`
+- `GET  /api/v1/reconstructions/{job_id}/pointmaps`
+- `GET  /api/v1/reconstructions/{job_id}/files` / `/files/{path}`
 
-## Deployment notes
+## Deploy
 
-- Job state is stored in memory, so restarting the API clears the job list.
-- Keep this service to a single container instance and a single Uvicorn worker unless you replace the in-memory job store with Redis, Postgres, or another shared backend.
-- The Docker deployment is the easiest way to ship the API because the image already contains COLMAP.
+The image ships **CPU-only torch** (`python:3.12-slim` base) because the deploy
+target is ECS Fargate (no GPU). It clones `naver/mast3r --recursive` (DUSt3R +
+CroCo submodules), installs deps, and bakes in the metric checkpoint — keeping the
+image ~4–5 GB so Fargate pulls it within its ephemeral storage. MASt3R runs on CPU
+via `device=auto` (slower but correct). For a GPU host, swap the base to
+`pytorch/pytorch:2.1.2-cuda11.8-cudnn8-runtime` and drop the CPU torch install.
+
+```bash
+cd aircraft-tire/3d-reconstructor
+docker compose up --build -d          # serves http://<host>:8000
+curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/api/v1/runtime     # shows resolved device (cuda/cpu)
+```
+
+The build downloads the checkpoint (~2 GB) and clones the repos, so the first
+build is slow. CroCo's optional CUDA RoPE kernels are **not** compiled — MASt3R
+falls back to a correct pure-pytorch RoPE.
+
+CPU-only (no GPU host): remove the `deploy.resources` block in `compose.yaml` and
+set `MAST3R_DEVICE=cpu`. Expect minutes per small scene.
+
+## Configuration
+
+See `.env.example`. Key vars: `MAST3R_MODEL_NAME`, `MAST3R_DEVICE` (auto/cuda/cpu),
+`MAST3R_IMAGE_SIZE` (512/224), `MAST3R_OPTIM_LEVEL` (coarse/refine/refine+depth),
+`MAST3R_MIN_CONF_THR`.
+
+## Notes & license
+
+- Job state is in-memory; a restart clears the job list. Keep to a single worker.
+- **License:** MASt3R / DUSt3R / CroCo are **CC BY-NC-SA 4.0 (non-commercial)**.
+  Fine for research/hackathon use; review before any commercial deployment.

@@ -1,0 +1,62 @@
+name: tyre-3d-defect-mapping
+
+# Full stack: the MASt3R reconstructor (GPU) + this Gradio app.
+# For a split deployment, run only `app` here and point RECONSTRUCTOR_API_URL
+# at a remote reconstructor.
+services:
+  reconstructor:
+    build:
+      context: ../3d-reconstructor
+      dockerfile: Dockerfile
+    image: spartans-ex/mast3r-api:local
+    environment:
+      MAST3R_DEVICE: ${MAST3R_DEVICE:-auto}
+      MAST3R_IMAGE_SIZE: ${MAST3R_IMAGE_SIZE:-512}
+      MAST3R_OPTIM_LEVEL: ${MAST3R_OPTIM_LEVEL:-refine+depth}
+    volumes:
+      - ./workspace/reconstructor:/app/workspace
+      - hf-cache:/opt/hf-cache
+    restart: unless-stopped
+    # Requires the NVIDIA Container Toolkit. Comment out for CPU-only (slow),
+    # and set MAST3R_DEVICE=cpu.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: spartans-ex/tyre-3d-gradio:local
+    environment:
+      RECONSTRUCTOR_API_URL: http://reconstructor:8000
+      RECONSTRUCTOR_JOB_TIMEOUT: ${RECONSTRUCTOR_JOB_TIMEOUT:-1800}
+      MAST3R_IMAGE_SIZE: ${MAST3R_IMAGE_SIZE:-512}
+      MAST3R_OPTIM_LEVEL: ${MAST3R_OPTIM_LEVEL:-refine+depth}
+      GRADIO_SERVER_NAME: 0.0.0.0
+      GRADIO_SERVER_PORT: 7860
+      ROBOFLOW_API_URL: ${ROBOFLOW_API_URL:-https://serverless.roboflow.com}
+      ROBOFLOW_API_KEY: ${ROBOFLOW_API_KEY:-}
+      CRACK_MODEL_ID: ${CRACK_MODEL_ID:-tyre-quality-qccvy/1}
+      TREAD_MODEL_ID: ${TREAD_MODEL_ID:-tyre_tread_depth_set/1}
+    volumes:
+      - ./workspace/app:/app/workspace
+    ports:
+      - "${APP_PORT:-7860}:7860"
+    depends_on:
+      reconstructor:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

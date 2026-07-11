@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
 from app.domain.schemas import INPUT_RANGES
+from app.services.assessment_gate import AssessmentGateError
 
 
 class ErrorDetail(BaseModel):
@@ -69,6 +70,26 @@ def _validation_message(field: str, error_type: str) -> str:
 
 def install_error_handlers(app: FastAPI) -> None:
     """Register validation handlers on an application instance."""
+
+    @app.exception_handler(AssessmentGateError)
+    async def assessment_gate_exception_handler(
+        _request: Request,
+        exc: AssessmentGateError,
+    ) -> JSONResponse:
+        payload = ErrorResponse(
+            error=ErrorBody(
+                code=exc.code,
+                message=exc.message,
+                details=[
+                    ErrorDetail(field=field, message=message) for field, message in exc.details
+                ]
+                or None,
+            )
+        )
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=payload.model_dump(exclude_none=True),
+        )
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(

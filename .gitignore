@@ -31,6 +31,7 @@ env/
 # Terraform
 infra/.terraform/
 *.tfplan
+infra/modules/uploads/upload_presigner.zip
 
 # COLMAP workspace: uploaded images and reconstruction outputs
 workspace/

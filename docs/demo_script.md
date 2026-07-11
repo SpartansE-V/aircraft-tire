@@ -143,6 +143,6 @@ Open **Documents** (three tabs).
 
 ### Reproducing the story
 
-The scenario is deterministic at the committed seed (`config/generator.yaml` → `seed`). If you
+The scenario is deterministic at the committed seed (`app/tire_rul/config/generator.yaml` → `seed`). If you
 change the seed, the specific tails and numbers change but every screen and behavior holds.
 Exact tails/wheels referenced above (VN-A300, VN-A325, …) are valid for the committed seed.

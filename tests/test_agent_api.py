@@ -16,16 +16,16 @@ import pytest
 from httpx import AsyncClient
 
 import app.services.agent_service as agent_service_module
-from app.rul.agent import ToolContext
-from app.rul.config import get_threshold_config
-from app.rul.scoring import RulEstimate, WheelRisk
 from app.services.agent_service import AgentDataUnavailableError
+from app.tire_rul.agent import ToolContext
+from app.tire_rul.config import get_threshold_config
+from app.tire_rul.scoring import TireRulEstimate, WheelRisk
 
 AS_OF = date(2025, 1, 1)
 
 
-def _est(rul_median: float, p10_days: int, p_cross: float) -> RulEstimate:
-    return RulEstimate(
+def _est(rul_median: float, p10_days: int, p_cross: float) -> TireRulEstimate:
+    return TireRulEstimate(
         rul_p10=rul_median * 0.9,
         rul_median=rul_median,
         rul_p90=rul_median * 1.1,
@@ -131,10 +131,10 @@ def _chat_payload(*turns: tuple[str, str], backend: str = "mock") -> dict[str, A
     }
 
 
-# --- POST /api/v1/rul/agent/chat ---
+# --- POST /api/v1/tire_rul/agent/chat ---
 async def test_agent_chat_grounded_decision(client: AsyncClient, fleet_ctx: ToolContext) -> None:
     payload = _chat_payload(("user", "What should I do about VN-A701 mlg l inbd?"))
-    response = await client.post("/api/v1/rul/agent/chat", json=payload)
+    response = await client.post("/api/v1/tire_rul/agent/chat", json=payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -162,7 +162,7 @@ async def test_agent_chat_resolves_reference_from_history(
         ("assistant", "**Situation — VN-A702 · nlg_l** ..."),
         ("user", "Predict it at 5 landings per day"),
     )
-    response = await client.post("/api/v1/rul/agent/chat", json=payload)
+    response = await client.post("/api/v1/tire_rul/agent/chat", json=payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -173,7 +173,7 @@ async def test_agent_chat_resolves_reference_from_history(
 
 async def test_agent_chat_station_plan(client: AsyncClient, fleet_ctx: ToolContext) -> None:
     payload = _chat_payload(("user", "Plan tonight's tire maintenance for SGN"))
-    response = await client.post("/api/v1/rul/agent/chat", json=payload)
+    response = await client.post("/api/v1/tire_rul/agent/chat", json=payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -193,7 +193,7 @@ async def test_agent_chat_station_plan(client: AsyncClient, fleet_ctx: ToolConte
 async def test_agent_chat_invalid_requests(
     client: AsyncClient, fleet_ctx: ToolContext, payload: dict[str, Any]
 ) -> None:
-    response = await client.post("/api/v1/rul/agent/chat", json=payload)
+    response = await client.post("/api/v1/tire_rul/agent/chat", json=payload)
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "INVALID_INPUT"
@@ -205,7 +205,7 @@ async def test_agent_chat_explicit_llm_backend_failure_is_502(
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     payload = _chat_payload(("user", "plan SGN"), backend="openai")
-    response = await client.post("/api/v1/rul/agent/chat", json=payload)
+    response = await client.post("/api/v1/tire_rul/agent/chat", json=payload)
 
     assert response.status_code == 502
     error = response.json()["error"]
@@ -216,14 +216,14 @@ async def test_agent_chat_explicit_llm_backend_failure_is_502(
 async def test_agent_chat_auto_falls_back_to_mock_when_llm_fails(
     client: AsyncClient, fleet_ctx: ToolContext, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import app.rul.agent.core as agent_core
+    import app.tire_rul.agent.core as agent_core
 
     # Make 'auto' pick the OpenAI backend, then let the call itself fail (no API key).
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(agent_core, "agent_backend_available", lambda backend: backend == "openai")
 
     payload = _chat_payload(("user", "Plan tonight's tire maintenance for SGN"), backend="auto")
-    response = await client.post("/api/v1/rul/agent/chat", json=payload)
+    response = await client.post("/api/v1/tire_rul/agent/chat", json=payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -231,11 +231,11 @@ async def test_agent_chat_auto_falls_back_to_mock_when_llm_fails(
     assert "Maintenance plan" in body["answer"]
 
 
-# --- GET /api/v1/rul/fleet/worklist ---
+# --- GET /api/v1/tire_rul/fleet/worklist ---
 async def test_worklist_ranks_urgent_wheel_first(
     client: AsyncClient, fleet_ctx: ToolContext
 ) -> None:
-    response = await client.get("/api/v1/rul/fleet/worklist")
+    response = await client.get("/api/v1/tire_rul/fleet/worklist")
 
     assert response.status_code == 200
     body = response.json()
@@ -253,21 +253,21 @@ async def test_worklist_ranks_urgent_wheel_first(
 async def test_worklist_station_filter_and_top_n(
     client: AsyncClient, fleet_ctx: ToolContext
 ) -> None:
-    filtered = await client.get("/api/v1/rul/fleet/worklist", params={"station": "HAN"})
+    filtered = await client.get("/api/v1/tire_rul/fleet/worklist", params={"station": "HAN"})
     assert [w["station"] for w in filtered.json()["wheels"]] == ["HAN"]
     assert filtered.json()["wheels"][0]["rank"] == 1  # rank is per returned list
 
-    capped = await client.get("/api/v1/rul/fleet/worklist", params={"top_n": 1})
+    capped = await client.get("/api/v1/tire_rul/fleet/worklist", params={"top_n": 1})
     assert len(capped.json()["wheels"]) == 1
 
-    invalid = await client.get("/api/v1/rul/fleet/worklist", params={"top_n": 0})
+    invalid = await client.get("/api/v1/tire_rul/fleet/worklist", params={"top_n": 0})
     assert invalid.status_code == 422
 
 
-# --- GET /api/v1/rul/wheel/status ---
+# --- GET /api/v1/tire_rul/wheel/status ---
 async def test_wheel_status_reports_condition(client: AsyncClient, fleet_ctx: ToolContext) -> None:
     response = await client.get(
-        "/api/v1/rul/wheel/status", params={"tail": "VN-A701", "position": "mlg_l_inbd"}
+        "/api/v1/tire_rul/wheel/status", params={"tail": "VN-A701", "position": "mlg_l_inbd"}
     )
 
     assert response.status_code == 200
@@ -285,7 +285,7 @@ async def test_wheel_status_accepts_position_alias(
     client: AsyncClient, fleet_ctx: ToolContext
 ) -> None:
     response = await client.get(
-        "/api/v1/rul/wheel/status", params={"tail": "VN-A702", "position": "nose l"}
+        "/api/v1/tire_rul/wheel/status", params={"tail": "VN-A702", "position": "nose l"}
     )
 
     assert response.status_code == 200
@@ -296,7 +296,7 @@ async def test_wheel_status_unknown_wheel_is_404(
     client: AsyncClient, fleet_ctx: ToolContext
 ) -> None:
     response = await client.get(
-        "/api/v1/rul/wheel/status", params={"tail": "VN-A999", "position": "nlg_l"}
+        "/api/v1/tire_rul/wheel/status", params={"tail": "VN-A999", "position": "nlg_l"}
     )
 
     assert response.status_code == 404
@@ -312,10 +312,12 @@ async def test_fleet_endpoints_return_503_when_dataset_unavailable(
 
     monkeypatch.setattr(agent_service_module, "_cached_context", _unavailable)
 
-    chat = await client.post("/api/v1/rul/agent/chat", json=_chat_payload(("user", "plan SGN")))
-    worklist = await client.get("/api/v1/rul/fleet/worklist")
+    chat = await client.post(
+        "/api/v1/tire_rul/agent/chat", json=_chat_payload(("user", "plan SGN"))
+    )
+    worklist = await client.get("/api/v1/tire_rul/fleet/worklist")
     status = await client.get(
-        "/api/v1/rul/wheel/status", params={"tail": "VN-A701", "position": "nlg_l"}
+        "/api/v1/tire_rul/wheel/status", params={"tail": "VN-A701", "position": "nlg_l"}
     )
 
     for response in (chat, worklist, status):

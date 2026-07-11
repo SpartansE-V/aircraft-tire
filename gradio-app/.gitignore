@@ -1,0 +1,22 @@
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Reconstruction workspace: uploaded images and outputs
+workspace/
+
+# Gradio temp/flagged artifacts
+flagged/
+.gradio/
+
+# Environment files (keep the committed example)
+.env
+.env.*
+!.env.example
+
+.DS_Store

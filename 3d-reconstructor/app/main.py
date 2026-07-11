@@ -9,7 +9,7 @@ from .job_store import JobStore
 from .routes.health import router as health_router
 from .routes.reconstructions import router as reconstructions_router
 from .routes.uploads import router as uploads_router
-from .services.colmap import ColmapService
+from .services.mast3r_reconstructor import Mast3rService
 from .services.uploads import UploadService
 
 
@@ -20,7 +20,7 @@ def create_app() -> FastAPI:
     app = FastAPI(title=settings.app_name)
     app.state.settings = settings
     app.state.job_store = JobStore()
-    app.state.colmap_service = ColmapService(settings=settings, store=app.state.job_store)
+    app.state.reconstruction_service = Mast3rService(settings=settings, store=app.state.job_store)
     app.state.upload_service = UploadService(settings=settings)
 
     app.include_router(health_router, prefix=settings.api_prefix)
@@ -32,14 +32,7 @@ def create_app() -> FastAPI:
 
 
 def _patch_binary_upload_docs(app: FastAPI) -> None:
-    """Make Swagger UI render a file picker for upload fields.
-
-    FastAPI emits OpenAPI 3.1, where binary bodies are described with
-    ``contentMediaType`` rather than the older ``format: binary``. The bundled
-    Swagger UI only draws a file-upload widget when it sees ``format: binary``,
-    so we inject it into the generated docs schema. This affects the docs only;
-    the endpoints accept files correctly either way.
-    """
+    """Make Swagger UI render a file picker for upload fields."""
     original_openapi = app.openapi
 
     def openapi() -> dict[str, Any]:

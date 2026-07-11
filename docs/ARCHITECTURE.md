@@ -5,24 +5,24 @@ The repository is one Python service with a hard seam between two layers:
 - **Backend (BE)** — `app/main.py`, `app/api/`, `app/domain/`, `app/services/`: a FastAPI app
   owning the HTTP surface, strict public schemas, sanitized errors, and logging. Strict-typed
   (mypy), runs on the base dependencies (`uv sync`).
-- **AI** — `app/rul/`: the TreadCast research pipeline (data generator, features, training,
+- **AI** — `app/tire_rul/`: the TreadCast research pipeline (data generator, features, training,
   scoring, CV, LLM agent, document grounding, Streamlit demo). Runs on the `ai` extra
   (`uv sync --extra ai`).
 
 ```
-                    BACKEND (base deps)                        AI (app/rul, `ai` extra)
+                    BACKEND (base deps)                        AI (app/tire_rul, `ai` extra)
  ┌─────────────────────────────────────────────────┐   ┌─────────────────────────────────────┐
  │ app/api/routes/*.py      HTTP endpoints          │   │ generate_data.py  physics sim       │
  │ app/domain/schemas.py    public contracts        │   │ features.py       leakage-safe      │
  │ app/services/            business logic          │   │ train.py          fit + eval        │
  │   wear_calculator.py     physics formula         │   │ cv/, agent/, grounding/, app.py     │
- │   rul_service.py  ───────────── THE SEAM ────────┼──►│ scoring.py        the pure brain    │
+ │   tire_rul_service.py  ───────────── THE SEAM ────────┼──►│ scoring.py        the pure brain    │
  └─────────────────────────────────────────────────┘   └─────────────────────────────────────┘
-        POST /api/v1/rul/predict ──► rul_service ──► app.rul.scoring.estimate_wheel()
-        (inputs: config/thresholds.yaml + artifacts/mixedlm_covariance.pkl + request readings)
+        POST /api/v1/tire_rul/predict ──► tire_rul_service ──► app.tire_rul.scoring.estimate_wheel()
+        (inputs: app/tire_rul/config/thresholds.yaml + app/tire_rul/artifacts/mixedlm_covariance.pkl + request readings)
 ```
 
-**Rule: `app/services/rul_service.py` is the only backend module allowed to import `app.rul`.**
+**Rule: `app/services/tire_rul_service.py` is the only backend module allowed to import `app.tire_rul`.**
 Routes and domain schemas never touch the AI package; the AI package never imports the backend.
 The serving path (`scoring` → `config` → `constants` → `paths`) needs only numpy + PyYAML, so
 the API image ships without pandas/statsmodels/streamlit.
@@ -33,11 +33,13 @@ the API image ships without pandas/statsmodels/streamlit.
 |---|---|---|
 | GET | `/health` | liveness |
 | POST | `/api/v1/wear-severity/calculate` | physics formula (`wear_calculator.py`) |
-| POST | `/api/v1/rul/predict` | **AI**: EB posterior + Monte-Carlo first passage over the fitted MixedLM prior |
+| POST | `/api/v1/tire_rul/predict` | **AI**: EB posterior + Monte-Carlo first passage over the fitted MixedLM prior |
 
-## The AI research pipeline (app/rul)
+## The AI research pipeline (app/tire_rul)
 
-Five decoupled modules in a linear pipeline; data flows through Parquet on disk.
+Five decoupled modules in a linear pipeline; data flows through Parquet on disk. The
+`config/`, `data/`, and `artifacts/` directories referenced below all live inside the
+`app/tire_rul/` package.
 
 ```
  config/*.yaml  ──►  generate_data.py  ──►  data/*.parquet  ──►  features.py  ──►  feature frame
@@ -47,7 +49,7 @@ Five decoupled modules in a linear pipeline; data flows through Parquet on disk.
                         feature frame  ──►  train.py  ──►  artifacts/  (mixedlm prior, weibull,
                                             fit + eval        lightgbm, eval_report.json)
 
-     prior + live readings  ──►  scoring.py  ──►  app.py (Streamlit demo)  +  rul_service.py (API)
+     prior + live readings  ──►  scoring.py  ──►  app.py (Streamlit demo)  +  tire_rul_service.py (API)
                                 (PURE brain)
 ```
 
@@ -98,8 +100,8 @@ quantiles, wear-to-limit dates (via utilization), and `P(cross before next check
 ## The `scoring.py` graduation seam — now realized
 
 `app.py` imports `scoring.py` for **all** computation and reimplements no model math. That seam
-was the deliberate path to production, and it is now live: `app/services/rul_service.py` lifts
-the identical pure functions behind `POST /api/v1/rul/predict` — **no rewrite happened**. The
+was the deliberate path to production, and it is now live: `app/services/tire_rul_service.py` lifts
+the identical pure functions behind `POST /api/v1/tire_rul/predict` — **no rewrite happened**. The
 Streamlit UI, the offline evaluation, and the API all call the same `scoring` functions with
 the same prior artifact and thresholds.
 

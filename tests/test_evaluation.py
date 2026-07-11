@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from app.rul.evaluation import (
+from app.tire_rul.evaluation import (
     alpha_lambda_accuracy,
     asymmetric_score,
     mae,

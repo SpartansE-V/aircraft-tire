@@ -1,0 +1,41 @@
+# Build context is the whole repo, but the API image only needs pyproject/uv.lock
+# and app/ — which now carries config/ and artifacts/mixedlm_covariance.pkl inside
+# app/tire_rul/ (see Dockerfile). Everything below is excluded to keep the context small.
+
+# VCS / caches / envs
+.git
+.gitignore
+.venv
+venv
+env
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+.env.*
+.DS_Store
+.claude
+
+# Other services and infra — not part of the API image
+web
+3d-reconstructor
+infra
+.github
+docs
+docker-compose.yml
+README.md
+
+# Tests aren't needed at runtime
+tests
+
+# Synthetic training data and heavy research artifacts — not needed to serve the API.
+# Everything under app/tire_rul is pulled in by `COPY app ./app`, so the heavy inputs are
+# excluded here; only app/tire_rul/artifacts/mixedlm_covariance.pkl (the fitted prior) survives.
+app/tire_rul/data
+app/tire_rul/artifacts/mixedlm.pkl
+app/tire_rul/artifacts/lightgbm.txt
+app/tire_rul/artifacts/weibull_aft.pkl
+app/tire_rul/artifacts/shap_values.parquet
+app/tire_rul/artifacts/eval_report.json

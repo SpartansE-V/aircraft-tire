@@ -22,7 +22,12 @@ router = APIRouter(prefix="/api/v1", tags=["Tire Assessment"])
     ),
     responses={
         400: {"model": ErrorResponse, "description": "Malformed JSON request body."},
+        409: {
+            "model": ErrorResponse,
+            "description": "Assessment withheld or model not authorized for intended use.",
+        },
         422: {"model": ErrorResponse, "description": "One or more inputs are invalid."},
+        503: {"model": ErrorResponse, "description": "Model evidence unavailable."},
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
     },
 )
