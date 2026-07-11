@@ -10,7 +10,7 @@ const avg = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) / xs.leng
 
 export function IdentityCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Identity" tag="OCR · 3D laser">
+    <Card title="Identity" mock tag="OCR · 3D laser">
       <div className="space-y-2">
         <Field k="Serial (molded)" v={tire.serial} mono />
         <Field k="OCR confidence" v={`${(tire.ocrConfidence * 100).toFixed(0)} %`} warn={tire.ocrConfidence < 0.85} />
@@ -32,7 +32,7 @@ export function IdentityCard({ tire }: { tire: Tire }) {
 export function PressureCard({ tire }: { tire: Tire }) {
   const psiDev = ((tire.psi - tire.psiTarget) / tire.psiTarget) * 100
   return (
-    <Card title="Tire pressure" tag="TPMS · ACARS">
+    <Card title="Tire pressure" mock tag="TPMS · ACARS">
       <Gauge
         value={tire.psi}
         min={Math.round(tire.psiTarget * 0.8)}
@@ -55,7 +55,7 @@ export function PressureCard({ tire }: { tire: Tire }) {
 
 export function TouchdownCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Touchdown / braking" tag="FOQA · per-flight rollup">
+    <Card title="Touchdown / braking" mock tag="FOQA · per-flight rollup">
       <div className="mb-1 flex justify-between text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
         <span>Peak vertical G · last 10</span>
         <span style={{ color: 'var(--crit)' }}>▲ &gt; 1.8 G</span>
@@ -78,7 +78,7 @@ export function TouchdownCard({ tire }: { tire: Tire }) {
 
 export function TaxiCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Taxi / steering" tag="FDR · ADS-B">
+    <Card title="Taxi / steering" mock tag="FDR · ADS-B">
       <div className="mb-3 grid grid-cols-3 gap-2">
         <Mini label="Taxi dist" value={`${tire.taxiKm} km`} />
         <Mini label="Avg gnd spd" value={`${tire.taxiAvgKt} kt`} />
@@ -101,7 +101,7 @@ export function TaxiCard({ tire }: { tire: Tire }) {
 
 export function WeatherCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Weights / environment" tag="ACARS · METAR">
+    <Card title="Weights / environment" mock tag="ACARS · METAR">
       <div className="grid grid-cols-2 gap-2">
         <Mini label="Payload" value={`${tire.payloadT} t`} />
         <Mini label="OAT" value={`${tire.oatC} °C`} bad={tire.oatC > 35} />
@@ -118,7 +118,7 @@ export function WeatherCard({ tire }: { tire: Tire }) {
 
 export function UtilizationCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Utilization" tag="OOOI · MRO">
+    <Card title="Utilization" mock tag="OOOI · MRO">
       <div className="grid grid-cols-2 gap-2">
         <Mini label="Cycles" value={`${tire.cycles}`} />
         <Mini label="Flight hrs" value={`${tire.flightHrs}`} />
@@ -139,7 +139,7 @@ export function UtilizationCard({ tire }: { tire: Tire }) {
 
 export function EventsCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Route profile · high-wear events" tag="Flight ops log">
+    <Card title="Route profile · high-wear events" mock tag="Flight ops log">
       {tire.events.length === 0 ? (
         <p className="py-6 text-center text-xs text-[var(--ink-4)]">No flagged events in window</p>
       ) : (
@@ -198,7 +198,7 @@ export function TreadCard({ tire }: { tire: Tire }) {
 
 export function DefectsCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Defects" tag="Vision model">
+    <Card title="Defects" mock tag="Vision model">
       {tire.defects.length === 0 ? (
         <p className="py-6 text-center text-xs text-[var(--ink-4)]">Clean — no wear or damage flags</p>
       ) : (
