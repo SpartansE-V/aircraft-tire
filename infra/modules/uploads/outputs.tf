@@ -17,3 +17,7 @@ output "presigner_function_name" {
 output "image_upload_url" {
   value = "${aws_apigatewayv2_api.upload_presigner.api_endpoint}/api/v1/uploads/images"
 }
+
+output "image_table_name" {
+  value = aws_dynamodb_table.images.name
+}

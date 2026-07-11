@@ -71,6 +71,45 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
   }
 }
 
+resource "aws_dynamodb_table" "images" {
+  name                        = "${var.project_name}-upload-images"
+  billing_mode                = "PAY_PER_REQUEST"
+  hash_key                    = "image_id"
+  deletion_protection_enabled = true
+
+  attribute {
+    name = "image_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "aircraft_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "created_at"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "aircraft-created-at-index"
+    hash_key        = "aircraft_id"
+    range_key       = "created_at"
+    projection_type = "ALL"
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  tags = var.tags
+}
+
 data "archive_file" "upload_presigner" {
   type        = "zip"
   source_file = "${path.module}/lambda/upload_presigner.py"
@@ -110,6 +149,16 @@ data "aws_iam_policy_document" "upload_presigner_s3" {
     ]
     resources = ["${aws_s3_bucket.uploads.arn}/uploads/*"]
   }
+
+  statement {
+    sid    = "WriteImageMetadata"
+    effect = "Allow"
+    actions = [
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+    ]
+    resources = [aws_dynamodb_table.images.arn]
+  }
 }
 
 resource "aws_iam_role_policy" "upload_presigner_s3" {
@@ -140,6 +189,7 @@ resource "aws_lambda_function" "upload_presigner" {
 
   environment {
     variables = {
+      IMAGE_TABLE             = aws_dynamodb_table.images.name
       MAX_DIRECT_UPLOAD_BYTES = tostring(var.direct_upload_max_bytes)
       UPLOAD_BUCKET           = aws_s3_bucket.uploads.bucket
       URL_EXPIRATION_SECS     = tostring(var.presigned_url_expiration_secs)
@@ -209,4 +259,24 @@ resource "aws_lambda_permission" "upload_presigner_api" {
   function_name = aws_lambda_function.upload_presigner.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.upload_presigner.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "upload_events" {
+  statement_id  = "AllowUploadBucketEvents"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.upload_presigner.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.uploads.arn
+}
+
+resource "aws_s3_bucket_notification" "upload_events" {
+  bucket = aws_s3_bucket.uploads.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.upload_presigner.arn
+    events              = ["s3:ObjectCreated:*"]
+    filter_prefix       = "uploads/"
+  }
+
+  depends_on = [aws_lambda_permission.upload_events]
 }

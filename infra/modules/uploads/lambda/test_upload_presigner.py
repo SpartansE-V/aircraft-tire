@@ -9,9 +9,13 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 os.environ["UPLOAD_BUCKET"] = "test-uploads"
+os.environ["IMAGE_TABLE"] = "test-images"
 fake_s3 = MagicMock()
+fake_dynamodb = MagicMock()
 fake_boto3 = types.ModuleType("boto3")
-fake_boto3.client = MagicMock(return_value=fake_s3)
+fake_boto3.client = MagicMock(
+    side_effect=lambda service: {"s3": fake_s3, "dynamodb": fake_dynamodb}[service]
+)
 fake_botocore = types.ModuleType("botocore")
 fake_botocore_exceptions = types.ModuleType("botocore.exceptions")
 fake_botocore_exceptions.BotoCoreError = type("BotoCoreError", (Exception,), {})
@@ -33,9 +37,17 @@ def invoke(payload):
     )
 
 
-def invoke_upload(content, content_type="image/png", filename="scan.png"):
+def invoke_upload(
+    content,
+    content_type="image/png",
+    filename="scan.png",
+    aircraft_id="aircraft-1",
+):
     boundary = "test-boundary"
     body = (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="aircraft_id"\r\n\r\n'
+        f"{aircraft_id}\r\n"
         f"--{boundary}\r\n"
         f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
         f"Content-Type: {content_type}\r\n\r\n"
@@ -54,6 +66,7 @@ def invoke_upload(content, content_type="image/png", filename="scan.png"):
 class UploadPresignerTests(unittest.TestCase):
     def setUp(self):
         fake_s3.reset_mock()
+        fake_dynamodb.reset_mock()
         fake_s3.generate_presigned_url.return_value = "https://signed.example/upload"
 
     @patch.object(
@@ -63,7 +76,12 @@ class UploadPresignerTests(unittest.TestCase):
     )
     def test_put_returns_server_generated_key_and_signed_url(self, _uuid):
         response = invoke(
-            {"action": "put", "fileName": "../left tire.jpg", "contentType": "image/jpeg"}
+            {
+                "action": "put",
+                "fileName": "../left tire.jpg",
+                "contentType": "image/jpeg",
+                "aircraftId": "aircraft-1",
+            }
         )
 
         self.assertEqual(response["statusCode"], 200)
@@ -71,7 +89,10 @@ class UploadPresignerTests(unittest.TestCase):
         self.assertEqual(
             body["key"], "uploads/12345678-1234-1234-1234-123456789abc/left-tire.jpg"
         )
+        self.assertEqual(body["imageId"], "12345678-1234-1234-1234-123456789abc")
         fake_s3.generate_presigned_url.assert_called_once()
+        item = fake_dynamodb.put_item.call_args.kwargs["Item"]
+        self.assertEqual(item["aircraft_id"], {"S": "aircraft-1"})
 
     def test_rejects_non_image_content_type(self):
         response = invoke({"fileName": "payload.html", "contentType": "text/html"})
@@ -88,6 +109,7 @@ class UploadPresignerTests(unittest.TestCase):
                 "fileName": "scan.png",
                 "contentType": "image/png",
                 "partCount": 3,
+                "aircraftId": "aircraft-1",
             }
         )
 
@@ -96,6 +118,7 @@ class UploadPresignerTests(unittest.TestCase):
         self.assertEqual(body["uploadId"], "upload-1")
         self.assertEqual([part["partNumber"] for part in body["parts"]], [1, 2, 3])
         self.assertEqual(fake_s3.generate_presigned_url.call_count, 3)
+        fake_dynamodb.put_item.assert_called_once()
 
     def test_complete_sorts_parts_before_calling_s3(self):
         fake_s3.complete_multipart_upload.return_value = {"ETag": '"complete-etag"'}
@@ -147,12 +170,45 @@ class UploadPresignerTests(unittest.TestCase):
             fake_s3.put_object.call_args.kwargs["Body"],
             b"\x89PNG\r\n\x1a\nimage-content",
         )
+        fake_dynamodb.put_item.assert_called_once()
+        self.assertEqual(fake_dynamodb.update_item.call_args.kwargs["TableName"], "test-images")
 
     def test_direct_upload_rejects_mime_mismatch(self):
         response = invoke_upload(b"\x89PNG\r\n\x1a\nimage-content", content_type="image/jpeg")
 
         self.assertEqual(response["statusCode"], 400)
         fake_s3.put_object.assert_not_called()
+
+    def test_presign_requires_aircraft_id(self):
+        response = invoke(
+            {"action": "put", "fileName": "scan.png", "contentType": "image/png"}
+        )
+
+        self.assertEqual(response["statusCode"], 400)
+        fake_dynamodb.put_item.assert_not_called()
+
+    def test_s3_event_marks_presigned_upload_complete(self):
+        response = upload_presigner.lambda_handler(
+            {
+                "Records": [
+                    {
+                        "s3": {
+                            "object": {
+                                "key": "uploads%2F12345678-1234-1234-1234-123456789abc%2Fscan.png",
+                                "size": 123,
+                                "eTag": "etag",
+                            }
+                        }
+                    }
+                ]
+            },
+            None,
+        )
+
+        self.assertEqual(response, {"processed": 1})
+        values = fake_dynamodb.update_item.call_args.kwargs["ExpressionAttributeValues"]
+        self.assertEqual(values[":status"], {"S": "UPLOADED"})
+        self.assertEqual(values[":size_bytes"], {"N": "123"})
 
 
 if __name__ == "__main__":

@@ -199,6 +199,26 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     }
   }
 
+  statement {
+    sid    = "ManageUploadImagesTable"
+    effect = "Allow"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTable",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:UpdateTable",
+    ]
+    resources = [
+      "arn:aws:dynamodb:${var.aws_region}:*:table/${var.project_name}-upload-images",
+      "arn:aws:dynamodb:${var.aws_region}:*:table/${var.project_name}-upload-images/index/*",
+    ]
+  }
+
   # ECS task execution/task roles (one pair per service, e.g. aircraft-tire
   # and aircraft-tire-3d-reconstructor) are part of this stack too, so
   # Terraform needs full lifecycle management of them specifically (scoped
