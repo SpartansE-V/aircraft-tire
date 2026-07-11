@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from treadcast.cv import (
+from app.rul.cv import (
     assess_tire,
     detect_damage,
     estimate_tread_depth,
@@ -62,7 +62,7 @@ def test_mock_vlm_report_distinguishes_wear_from_damage():
 
 
 def test_read_serial_via_ocr():
-    from treadcast.cv.assess import read_serial
+    from app.rul.cv.assess import read_serial
 
     img = render_tire_image(6.0, serial="MI-ABC123", seed=2)
     serial, conf = read_serial(img)
@@ -73,7 +73,7 @@ def test_read_serial_via_ocr():
 # VLM backends (mock / OpenAI / Claude) — no API key required for these
 # ---------------------------------------------------------------------------
 def test_get_vlm_openai_backend():
-    from treadcast.cv import OpenAiVlm
+    from app.rul.cv import OpenAiVlm
 
     v = get_vlm("openai")
     assert isinstance(v, OpenAiVlm)
@@ -81,14 +81,14 @@ def test_get_vlm_openai_backend():
 
 
 def test_openai_model_env_override(monkeypatch):
-    from treadcast.cv import OpenAiVlm
+    from app.rul.cv import OpenAiVlm
 
     monkeypatch.setenv("OPENAI_VLM_MODEL", "gpt-4o")
     assert OpenAiVlm().model == "gpt-4o"
 
 
 def test_get_vlm_auto_falls_back_to_mock(monkeypatch):
-    from treadcast.cv import MockVlm, assess
+    from app.rul.cv import MockVlm, assess
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
@@ -108,7 +108,7 @@ def test_openai_vlm_requires_key(monkeypatch):
 
 
 def test_vlm_available(monkeypatch):
-    from treadcast.cv import vlm_available
+    from app.rul.cv import vlm_available
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert vlm_available("mock") is True
@@ -118,7 +118,7 @@ def test_vlm_available(monkeypatch):
 
 
 def test_parse_vlm_json_filters_invalid_damage():
-    from treadcast.cv.assess import _parse_vlm_json
+    from app.rul.cv.assess import _parse_vlm_json
 
     out = _parse_vlm_json('prefix {"damage": ["cut", "banana", "fod"], "report": "r"} suffix')
     assert out["damage"] == ["cut", "fod"] and out["report"] == "r"
@@ -128,7 +128,7 @@ def test_parse_vlm_json_filters_invalid_damage():
 # Bedrock backend
 # ---------------------------------------------------------------------------
 def test_get_vlm_bedrock_backend(monkeypatch):
-    from treadcast.cv import BedrockVlm
+    from app.rul.cv import BedrockVlm
 
     monkeypatch.delenv("AWS_REGION", raising=False)
     monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
@@ -139,7 +139,7 @@ def test_get_vlm_bedrock_backend(monkeypatch):
 
 
 def test_bedrock_model_and_region_env_override(monkeypatch):
-    from treadcast.cv import BedrockVlm
+    from app.rul.cv import BedrockVlm
 
     monkeypatch.setenv("BEDROCK_VLM_MODEL", "anthropic.claude-haiku-4-5")
     monkeypatch.setenv("AWS_REGION", "ap-southeast-1")
@@ -149,7 +149,7 @@ def test_bedrock_model_and_region_env_override(monkeypatch):
 
 
 def test_bedrock_vlm_requires_credentials(monkeypatch):
-    from treadcast.cv import assess
+    from app.rul.cv import assess
 
     monkeypatch.setattr(assess, "_aws_credentials_present", lambda: False)
     with pytest.raises(RuntimeError, match="AWS credentials"):
@@ -157,7 +157,7 @@ def test_bedrock_vlm_requires_credentials(monkeypatch):
 
 
 def test_vlm_available_bedrock(monkeypatch):
-    from treadcast.cv import assess, vlm_available
+    from app.rul.cv import assess, vlm_available
 
     monkeypatch.setattr(assess, "_aws_credentials_present", lambda: True)
     assert vlm_available("bedrock") is True  # anthropic SDK installed + creds present

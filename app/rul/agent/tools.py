@@ -11,11 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from treadcast import scoring
-from treadcast.config import ThresholdConfig
-from treadcast.constants import ALL_POSITIONS
-from treadcast.grounding import dispatch_for_wheel, extract_defect_log, grounded_thresholds
-from treadcast.grounding.defect_logs import POSITION_ALIASES
+from app.rul import scoring
+from app.rul.config import ThresholdConfig
+from app.rul.constants import ALL_POSITIONS
+from app.rul.grounding import dispatch_for_wheel, extract_defect_log, grounded_thresholds
+from app.rul.grounding.defect_logs import POSITION_ALIASES
 
 _VALID_POS = {p.value for p in ALL_POSITIONS}
 
@@ -176,7 +176,7 @@ def render_scan_image(ctx: ToolContext, tail: str, position: str):
     """
     import zlib
 
-    from treadcast.cv import render_tire_image
+    from app.rul.cv import render_tire_image
 
     ac_id = ctx._ac_id.get(tail)
     tid = ctx._tid.get((ac_id, _norm_pos(position)))
@@ -196,7 +196,7 @@ def render_scan_image(ctx: ToolContext, tail: str, position: str):
 
 def get_damage_area(ctx: ToolContext, tail: str, position: str) -> dict:
     """Locate damage regions (type, pixel bbox, tread location) on the wheel's latest scan."""
-    from treadcast.cv import locate_damage
+    from app.rul.cv import locate_damage
 
     img, meta = render_scan_image(ctx, tail, position)
     if img is None:

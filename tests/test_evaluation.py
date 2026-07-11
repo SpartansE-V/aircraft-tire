@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from treadcast.evaluation import (
+from app.rul.evaluation import (
     alpha_lambda_accuracy,
     asymmetric_score,
     mae,

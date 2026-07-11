@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from treadcast.grounding import (
+from app.rul.grounding import (
     dispatch_for_wheel,
     extract_defect_log,
     grounded_thresholds,

@@ -11,9 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from treadcast import paths
-from treadcast.config import get_generator_config
-from treadcast.grounding.defect_logs import render_defect_log_line
+from app.rul import paths
+from app.rul.config import get_generator_config
+from app.rul.grounding.defect_logs import render_defect_log_line
 
 N_LOGS = 60
 DAMAGE_REASONS = ["cut", "bulge", "fod"]

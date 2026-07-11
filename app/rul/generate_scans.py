@@ -11,9 +11,9 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from treadcast import paths
-from treadcast.config import get_generator_config
-from treadcast.cv.images import DAMAGE_TYPES
+from app.rul import paths
+from app.rul.config import get_generator_config
+from app.rul.cv.images import DAMAGE_TYPES
 
 DAMAGE_RATE = 0.06  # fraction of currently-mounted tires showing acute damage
 LASER_PRECISION_SD = 0.12  # laser tread-depth noise (mm) — tighter than the 0.25mm manual gauge

@@ -7,3 +7,10 @@ __pycache__
 .env
 tests
 *.pyc
+# Synthetic training data and heavy research artifacts — not needed to serve the API.
+# The Dockerfile copies only artifacts/mixedlm_covariance.pkl (the fitted prior).
+data
+artifacts/mixedlm.pkl
+artifacts/lightgbm.txt
+artifacts/weibull_aft.pkl
+artifacts/shap_values.parquet

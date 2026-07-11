@@ -11,8 +11,8 @@ from pathlib import Path
 
 import yaml
 
-from treadcast import paths
-from treadcast.config import ThresholdConfig
+from app.rul import paths
+from app.rul.config import ThresholdConfig
 
 
 @lru_cache(maxsize=4)

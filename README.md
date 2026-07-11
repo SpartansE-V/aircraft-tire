@@ -26,7 +26,7 @@ them.
 
 ## Agentic AI — the Maintenance Decision Agent (core)
 
-The decision layer is an **LLM agent** (`treadcast.agent`) that turns a natural-language request
+The decision layer is an **LLM agent** (`app.rul.agent`) that turns a natural-language request
 into a grounded maintenance decision by **autonomously calling tools** over the whole pipeline —
 it is the core of the product, not a bolt-on. Ask it *"what should I do about VN-A300's main gear?"*
 or *"plan tonight's tire maintenance for SGN"* and it investigates:
@@ -94,7 +94,7 @@ tire is a *scheduled* swap (`SCHEDULE`), while VLM-detected acute damage forces 
 
 ## Document grounding (AMM · MEL/CDL · defect logs)
 
-The **Documents** screen grounds the tool in the reference manuals (`treadcast.grounding`):
+The **Documents** screen grounds the tool in the reference manuals (`app.rul.grounding`):
 
 - **AMM provenance** — every threshold (wear limit, pressure ladder, inspection interval, removal
   criteria) is traceable to an AMM reference, with a drift check against the manual value.
@@ -108,19 +108,31 @@ The **Documents** screen grounds the tool in the reference manuals (`treadcast.g
 
 ## Quickstart
 
+**Backend API** (base deps only — FastAPI + the RUL serving path):
+
 ```bash
-cd treadcast
-make setup      # create .venv (Python 3.11) and install deps
-make generate   # write synthetic Parquet tables to data/
+make install    # uv sync
+make run        # uvicorn app.main:app — Swagger at http://localhost:8000/docs
+make test       # backend + scoring tests (AI research tests skip without the ai extra)
+```
+
+Endpoints: `GET /health`, `POST /api/v1/wear-severity/calculate` (physics formula), and
+`POST /api/v1/rul/predict` — the **AI endpoint** (empirical-Bayes posterior + Monte-Carlo
+first passage over the fitted MixedLM prior).
+
+**AI pipeline** (full ML stack):
+
+```bash
+make install-ai # uv sync --extra ai
+make data       # write synthetic Parquet tables to data/
 make scans      # write the imaging/scanning layer (tire_scans) for the CV screen
 make logs       # write synthetic free-text defect logs for the Documents screen
 make train      # fit models, write artifacts/ + eval report
-make run        # launch the Streamlit app
+make ui         # launch the Streamlit demo
 ```
 
-`make all` runs generate → train → test. On macOS the LightGBM baseline needs OpenMP
-(`brew install libomp`); it degrades gracefully if missing (the headline MixedLM/Weibull models
-do not depend on it).
+On macOS the LightGBM baseline needs OpenMP (`brew install libomp`); it degrades gracefully if
+missing (the headline MixedLM/Weibull models do not depend on it).
 
 ## Results (whole-tire holdout, committed seed)
 
@@ -150,10 +162,10 @@ synthetic**; the method and pipeline are what transfer to real inspection record
 - Computer-vision tread scoring from photos (core engine runs on tabular history alone)
 - Real-data / TPMS / FDR-QAR sensor ingestion
 - MRO-system integration (AMOS/TRAX/Ramco) — an architecture slide, not code
-- Production concerns: auth, multi-tenancy, database, API layer (Streamlit + Parquet only)
+- Production concerns: auth, multi-tenancy, database (the FastAPI layer is stateless — Parquet/artifacts on disk)
 - Deep sequence models (wrong tool for sparse, irregular inspection data)
 
-The `scoring.py` module is a deliberate seam: the same pure functions lift behind a FastAPI
-service + React front end and MRO integration without a rewrite. See
+The `scoring.py` module is a deliberate seam — and it is now lifted behind FastAPI:
+`app/services/rul_service.py` serves the same pure functions at `POST /api/v1/rul/predict`. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the 10-minute
 [docs/demo_script.md](docs/demo_script.md).

@@ -10,9 +10,9 @@ from datetime import date, timedelta
 import numpy as np
 import pytest
 
-from treadcast import scoring
-from treadcast.constants import AlertCategory, AlertType, PressureLadderAction
-from treadcast.scoring import RulEstimate, WheelRisk
+from app.rul import scoring
+from app.rul.constants import AlertCategory, AlertType, PressureLadderAction
+from app.rul.scoring import RulEstimate, WheelRisk
 
 PRIOR_MEAN = np.array([12.0, -0.035])
 PRIOR_COV = np.array([[0.7, 0.0], [0.0, 1e-4]])

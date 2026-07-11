@@ -14,6 +14,10 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
 COPY app ./app
+# Runtime inputs for the RUL AI endpoint: scoring thresholds + the fitted population prior
+# (386 B). Training data and heavy research artifacts are excluded via .dockerignore.
+COPY config ./config
+COPY artifacts/mixedlm_covariance.pkl ./artifacts/mixedlm_covariance.pkl
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app

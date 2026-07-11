@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from treadcast.constants import NEW_TREAD_MM_MAX, NEW_TREAD_MM_MIN, TireOutcome
-from treadcast.generate_data import generate
+from app.rul.constants import NEW_TREAD_MM_MAX, NEW_TREAD_MM_MIN, TireOutcome
+from app.rul.generate_data import generate
 
 
 def test_median_life_bands(tables):

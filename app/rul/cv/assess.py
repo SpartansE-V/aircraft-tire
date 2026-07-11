@@ -18,7 +18,7 @@ from typing import Protocol
 import numpy as np
 from PIL import Image
 
-from treadcast.cv.images import (
+from app.rul.cv.images import (
     BOX,
     DARK_THRESHOLD,
     GROOVE_COUNT,

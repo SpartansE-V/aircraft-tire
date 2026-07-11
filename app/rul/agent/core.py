@@ -16,7 +16,7 @@ import json
 import os
 import re
 
-from agent.tools import TOOL_SCHEMAS, ToolContext, _norm_pos, call_tool
+from app.rul.agent.tools import TOOL_SCHEMAS, ToolContext, _norm_pos, call_tool
 
 SYSTEM_PROMPT = (
     "You are TreadCast's aircraft-tire maintenance agent, chatting with a line engineer. "
@@ -37,7 +37,7 @@ def agent_backend_available(backend: str) -> bool:
     if backend == "openai":
         return importlib.util.find_spec("openai") is not None and bool(os.environ.get("OPENAI_API_KEY"))
     if backend == "bedrock":
-        from cv.assess import _aws_credentials_present
+        from app.rul.cv.assess import _aws_credentials_present
 
         return importlib.util.find_spec("anthropic") is not None and _aws_credentials_present()
     return backend == "mock"
@@ -114,7 +114,7 @@ class MaintenanceAgent:
                 "The Bedrock agent needs the Anthropic SDK with Bedrock support "
                 "(pip install 'anthropic[bedrock]')."
             ) from exc
-        from agent.tools import anthropic_tool_schemas
+        from app.rul.agent.tools import anthropic_tool_schemas
 
         # Bedrock model IDs carry an `anthropic.` prefix.
         model = self.model or os.environ.get("BEDROCK_AGENT_MODEL", "anthropic.claude-opus-4-8")

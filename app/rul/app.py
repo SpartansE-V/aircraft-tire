@@ -17,18 +17,18 @@ from datetime import date
 import numpy as np
 import pandas as pd
 
-# Absolute imports: app.py is the only module run directly via `streamlit run`, where relative
-# imports have no package context. The package is installed (pip install -e .), so these resolve.
-from treadcast import paths, scoring
-from treadcast.config import (
+# Absolute imports: app.py is the only module run directly via `streamlit run` (from the repo
+# root, e.g. `make ui`), where relative imports have no package context.
+from app.rul import paths, scoring
+from app.rul.config import (
     GeneratorConfig,
     ThresholdConfig,
     get_generator_config,
     get_threshold_config,
 )
-from treadcast.constants import ALL_POSITIONS, PressureLadderAction
-from treadcast.features import build_features
-from treadcast.scoring import WheelRisk
+from app.rul.constants import ALL_POSITIONS, PressureLadderAction
+from app.rul.features import build_features
+from app.rul.scoring import WheelRisk
 
 SAFETY_FOOTER = (
     "TreadCast is **decision support** that prioritizes within existing AMM removal limits — "
@@ -320,8 +320,8 @@ def _annotated_scan(ctx, tail: str, position: str):
     """Re-render a wheel's scan with damage bounding boxes drawn on it (for inline chat display)."""
     from PIL import ImageDraw
 
-    from treadcast.agent.tools import render_scan_image
-    from treadcast.cv import locate_damage
+    from app.rul.agent.tools import render_scan_image
+    from app.rul.cv import locate_damage
 
     img, meta = render_scan_image(ctx, tail, position)
     if img is None:
@@ -337,7 +337,7 @@ def _annotated_scan(ctx, tail: str, position: str):
 
 
 def _screen_agent(st, tables, risks, tc, as_of, prior=None, feats=None):
-    from treadcast.agent import MaintenanceAgent, ToolContext, agent_backend_available
+    from app.rul.agent import MaintenanceAgent, ToolContext, agent_backend_available
 
     st.title("Engineer Chat — one place for everything")
     st.caption(
@@ -639,7 +639,7 @@ def _screen_wheel(st, go, tables, feats, prior, tc, risks, as_of):
 def _screen_scan(st, tables, risks, tc, as_of):
     import zlib
 
-    from treadcast.cv import assess_tire, get_vlm, render_tire_image, vlm_available
+    from app.rul.cv import assess_tire, get_vlm, render_tire_image, vlm_available
 
     st.title("Tire Scan — automated CV diagnostics")
     st.caption(
@@ -648,7 +648,7 @@ def _screen_scan(st, tables, risks, tc, as_of):
     )
     scans = tables.get("tire_scans")
     if scans is None:
-        st.warning("No scan data — run `make scans` (python -m treadcast.generate_scans) first.")
+        st.warning("No scan data — run `make scans` (python -m app.rul.generate_scans) first.")
         return
 
     scan_by_tire = {row.tire_id: row for row in scans.itertuples()}
@@ -837,7 +837,7 @@ def _alert_card(st, a):
 
 
 def _screen_documents(st, tables, risks, tc, as_of):
-    from treadcast.grounding import (
+    from app.rul.grounding import (
         dispatch_for_wheel,
         extract_defect_log,
         grounded_thresholds,
@@ -893,7 +893,7 @@ def _screen_documents(st, tables, risks, tc, as_of):
         st.caption("Mine historical **free-text** defect logs into structured records, linked by serial — the 'underused inspection records' wedge. Rule-based here; a VLM/LLM plugs in for messier logs.")
         logs = tables.get("defect_logs")
         if logs is None:
-            st.warning("No defect logs — run `make logs` (python -m treadcast.generate_defect_logs).")
+            st.warning("No defect logs — run `make logs` (python -m app.rul.generate_defect_logs).")
             return
         fields = {
             "tail": "true_tail",

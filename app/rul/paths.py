@@ -1,6 +1,6 @@
 """Central path resolution for data tables, model artifacts, and config files.
 
-Project root is resolved relative to this file (``src/treadcast/paths.py`` -> project root),
+Project root is resolved relative to this file (``app/rul/paths.py`` -> project root),
 so every module reads/writes the same locations regardless of the current working directory.
 """
 
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# src/treadcast/paths.py -> parents[2] == the treadcast/ project root
+# app/rul/paths.py -> parents[2] == the repository root (where data/, artifacts/, config/ live)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = PROJECT_ROOT / "data"

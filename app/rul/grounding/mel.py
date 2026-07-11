@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from treadcast.grounding.amm import load_knowledge
+from app.rul.grounding.amm import load_knowledge
 
 
 @dataclass

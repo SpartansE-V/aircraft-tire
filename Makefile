@@ -1,11 +1,32 @@
-.PHONY: install run test lint format-check type-check compile check docker-build
+.PHONY: install install-ai run ui data scans logs train test lint format-check type-check compile check docker-build
 
+# --- Backend (API) ---
 install:
 	uv sync
 
 run:
 	uv run uvicorn app.main:app --host 0.0.0.0 --port $${PORT:-8000}
 
+# --- AI pipeline (needs the full ML stack: `make install-ai`) ---
+install-ai:
+	uv sync --extra ai
+
+ui:
+	uv run streamlit run app/rul/app.py
+
+data:
+	uv run python -m app.rul.generate_data
+
+scans:
+	uv run python -m app.rul.generate_scans
+
+logs:
+	uv run python -m app.rul.generate_defect_logs
+
+train:
+	uv run python -m app.rul.train
+
+# --- Quality gates ---
 test:
 	uv run pytest -q
 

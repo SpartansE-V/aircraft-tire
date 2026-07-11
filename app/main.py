@@ -13,6 +13,7 @@ from starlette.responses import Response
 
 from app.api.errors import install_error_handlers, internal_error_response
 from app.api.routes.health import router as health_router
+from app.api.routes.rul import router as rul_router
 from app.api.routes.wear_severity import router as wear_severity_router
 from app.config import Settings, get_settings
 from app.domain.schemas import RootResponse
@@ -96,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     application.include_router(health_router)
     application.include_router(wear_severity_router)
+    application.include_router(rul_router)
     return application
 
 

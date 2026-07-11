@@ -6,7 +6,7 @@ a deterministic, offline backend — so the pipeline runs with no external API a
 against known ground truth. A Claude-vision backend is pluggable as the production VLM.
 """
 
-from treadcast.cv.assess import (
+from app.rul.cv.assess import (
     BedrockVlm,
     ClaudeVlm,
     MockVlm,
@@ -20,7 +20,7 @@ from treadcast.cv.assess import (
     read_serial,
     vlm_available,
 )
-from treadcast.cv.images import render_tire_image
+from app.rul.cv.images import render_tire_image
 
 __all__ = [
     "BedrockVlm",

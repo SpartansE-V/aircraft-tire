@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from treadcast.features import (
+from app.rul.features import (
     FEATURE_COLUMNS,
     assign_folds,
     build_features,
