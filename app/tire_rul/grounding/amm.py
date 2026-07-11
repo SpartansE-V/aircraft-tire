@@ -11,8 +11,8 @@ from pathlib import Path
 
 import yaml
 
-from app.rul import paths
-from app.rul.config import ThresholdConfig
+from app.tire_rul import paths
+from app.tire_rul.config import ThresholdConfig
 
 
 @lru_cache(maxsize=4)

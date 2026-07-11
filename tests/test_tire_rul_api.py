@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from httpx import AsyncClient
 
-from app.services.rul_service import rul_service
+from app.services.tire_rul_service import tire_rul_service
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def rul_payload() -> dict[str, Any]:
 
 @pytest.mark.asyncio
 async def test_successful_prediction(client: AsyncClient, rul_payload: dict[str, Any]) -> None:
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -61,8 +61,8 @@ async def test_successful_prediction(client: AsyncClient, rul_payload: dict[str,
 async def test_prediction_is_deterministic_for_fixed_date(
     client: AsyncClient, rul_payload: dict[str, Any]
 ) -> None:
-    first = (await client.post("/api/v1/rul/predict", json=rul_payload)).json()
-    second = (await client.post("/api/v1/rul/predict", json=rul_payload)).json()
+    first = (await client.post("/api/v1/tire_rul/predict", json=rul_payload)).json()
+    second = (await client.post("/api/v1/tire_rul/predict", json=rul_payload)).json()
 
     for volatile_field in ("prediction_id",):
         first.pop(volatile_field)
@@ -76,7 +76,7 @@ async def test_no_readings_falls_back_to_fleet_prior(
 ) -> None:
     rul_payload["readings"] = []
     rul_payload["current_cycles"] = 0
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -88,7 +88,7 @@ async def test_no_readings_falls_back_to_fleet_prior(
 @pytest.mark.asyncio
 async def test_readings_field_is_optional(client: AsyncClient, rul_payload: dict[str, Any]) -> None:
     del rul_payload["readings"]
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 200
     assert response.json()["readings_used"] == 0
@@ -105,7 +105,7 @@ async def test_worn_tire_reports_replace_now(
         {"cycles_since_install": 280, "measured_groove_mm": 2.1},
     ]
     rul_payload["current_cycles"] = 285
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 200
     body = response.json()
@@ -122,7 +122,7 @@ async def test_all_wheel_positions_accepted(
     client: AsyncClient, rul_payload: dict[str, Any], position: str
 ) -> None:
     rul_payload["position"] = position
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 200
     assert response.json()["position"] == position
@@ -131,7 +131,7 @@ async def test_all_wheel_positions_accepted(
 @pytest.mark.asyncio
 async def test_invalid_position_rejected(client: AsyncClient, rul_payload: dict[str, Any]) -> None:
     rul_payload["position"] = "left_wheel"
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 422
     body = response.json()
@@ -142,7 +142,7 @@ async def test_invalid_position_rejected(client: AsyncClient, rul_payload: dict[
 @pytest.mark.asyncio
 async def test_unknown_field_rejected(client: AsyncClient, rul_payload: dict[str, Any]) -> None:
     rul_payload["tire_serial"] = "T-1234"
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "INVALID_INPUT"
@@ -150,7 +150,7 @@ async def test_unknown_field_rejected(client: AsyncClient, rul_payload: dict[str
 
 @pytest.mark.asyncio
 async def test_missing_required_fields_rejected(client: AsyncClient) -> None:
-    response = await client.post("/api/v1/rul/predict", json={"position": "nlg_l"})
+    response = await client.post("/api/v1/tire_rul/predict", json={"position": "nlg_l"})
 
     assert response.status_code == 422
     fields = {detail["field"] for detail in response.json()["error"]["details"]}
@@ -171,7 +171,7 @@ async def test_out_of_range_inputs_rejected(
     client: AsyncClient, rul_payload: dict[str, Any], field: str, value: float
 ) -> None:
     rul_payload[field] = value
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 422
 
@@ -179,7 +179,7 @@ async def test_out_of_range_inputs_rejected(
 @pytest.mark.asyncio
 async def test_invalid_reading_rejected(client: AsyncClient, rul_payload: dict[str, Any]) -> None:
     rul_payload["readings"] = [{"cycles_since_install": 10, "measured_groove_mm": 0}]
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 422
 
@@ -187,7 +187,7 @@ async def test_invalid_reading_rejected(client: AsyncClient, rul_payload: dict[s
 @pytest.mark.asyncio
 async def test_malformed_json_rejected(client: AsyncClient) -> None:
     response = await client.post(
-        "/api/v1/rul/predict",
+        "/api/v1/tire_rul/predict",
         content=b'{"position": "nlg_l",',
         headers={"Content-Type": "application/json"},
     )
@@ -201,7 +201,7 @@ async def test_endpoint_in_openapi(client: AsyncClient) -> None:
     response = await client.get("/openapi.json")
 
     assert response.status_code == 200
-    assert "/api/v1/rul/predict" in response.json()["paths"]
+    assert "/api/v1/tire_rul/predict" in response.json()["paths"]
 
 
 @pytest.mark.asyncio
@@ -222,8 +222,8 @@ async def test_unexpected_errors_are_sanitized(
     def explode(_request: Any) -> Any:
         raise RuntimeError("prior artifact path leaked")
 
-    monkeypatch.setattr(rul_service, "predict", explode)
-    response = await client.post("/api/v1/rul/predict", json=rul_payload)
+    monkeypatch.setattr(tire_rul_service, "predict", explode)
+    response = await client.post("/api/v1/tire_rul/predict", json=rul_payload)
 
     assert response.status_code == 500
     assert response.json() == {

@@ -26,7 +26,7 @@ them.
 
 ## Agentic AI — the Maintenance Decision Agent (core)
 
-The decision layer is an **LLM agent** (`app.rul.agent`) that turns a natural-language request
+The decision layer is an **LLM agent** (`app.tire_rul.agent`) that turns a natural-language request
 into a grounded maintenance decision by **autonomously calling tools** over the whole pipeline —
 it is the core of the product, not a bolt-on. Ask it *"what should I do about VN-A300's main gear?"*
 or *"plan tonight's tire maintenance for SGN"* and it investigates:
@@ -94,7 +94,7 @@ tire is a *scheduled* swap (`SCHEDULE`), while VLM-detected acute damage forces 
 
 ## Document grounding (AMM · MEL/CDL · defect logs)
 
-The **Documents** screen grounds the tool in the reference manuals (`app.rul.grounding`):
+The **Documents** screen grounds the tool in the reference manuals (`app.tire_rul.grounding`):
 
 - **AMM provenance** — every threshold (wear limit, pressure ladder, inspection interval, removal
   criteria) is traceable to an AMM reference, with a drift check against the manual value.
@@ -117,7 +117,7 @@ make test       # backend + scoring tests (AI research tests skip without the ai
 ```
 
 Endpoints: `GET /health`, `POST /api/v1/wear-severity/calculate` (physics formula), and
-`POST /api/v1/rul/predict` — the **AI endpoint** (empirical-Bayes posterior + Monte-Carlo
+`POST /api/v1/tire_rul/predict` — the **AI endpoint** (empirical-Bayes posterior + Monte-Carlo
 first passage over the fitted MixedLM prior).
 
 **AI pipeline** (full ML stack):
@@ -166,6 +166,6 @@ synthetic**; the method and pipeline are what transfer to real inspection record
 - Deep sequence models (wrong tool for sparse, irregular inspection data)
 
 The `scoring.py` module is a deliberate seam — and it is now lifted behind FastAPI:
-`app/services/rul_service.py` serves the same pure functions at `POST /api/v1/rul/predict`. See
+`app/services/tire_rul_service.py` serves the same pure functions at `POST /api/v1/tire_rul/predict`. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the 10-minute
 [docs/demo_script.md](docs/demo_script.md).

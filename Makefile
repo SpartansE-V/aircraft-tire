@@ -12,19 +12,19 @@ install-ai:
 	uv sync --extra ai
 
 ui:
-	uv run streamlit run app/rul/app.py
+	uv run streamlit run app/tire_rul/app.py
 
 data:
-	uv run python -m app.rul.generate_data
+	uv run python -m app.tire_rul.generate_data
 
 scans:
-	uv run python -m app.rul.generate_scans
+	uv run python -m app.tire_rul.generate_scans
 
 logs:
-	uv run python -m app.rul.generate_defect_logs
+	uv run python -m app.tire_rul.generate_defect_logs
 
 train:
-	uv run python -m app.rul.train
+	uv run python -m app.tire_rul.train
 
 # --- Quality gates ---
 test:

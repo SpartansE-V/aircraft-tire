@@ -1,7 +1,7 @@
-"""RUL prediction service — the backend's only bridge into the app.rul model package.
+"""RUL prediction service — the backend's only bridge into the app.tire_rul model package.
 
 The FastAPI layer (routes + domain schemas) stays free of ML concerns; this module owns the
-translation between the public RulPredictionRequest/Response contract and app.rul.scoring,
+translation between the public TireRulPredictionRequest/Response contract and app.tire_rul.scoring,
 the pure-numpy degradation brain (empirical-Bayes posterior + Monte-Carlo first passage).
 """
 
@@ -16,14 +16,14 @@ from uuid import uuid4
 import numpy as np
 
 from app.domain.schemas import (
-    RulPredictionRequest,
-    RulPredictionResponse,
-    RulQuantiles,
-    RulStatus,
+    TireRulPredictionRequest,
+    TireRulPredictionResponse,
+    TireRulQuantiles,
+    TireRulStatus,
     WearToLimitDates,
 )
-from app.rul import paths, scoring
-from app.rul.config import ThresholdConfig, get_threshold_config
+from app.tire_rul import paths, scoring
+from app.tire_rul.config import ThresholdConfig, get_threshold_config
 
 DISCLAIMER = (
     "Decision-support estimate for inspection planning only. It prioritizes within existing "
@@ -48,10 +48,10 @@ def _load_thresholds() -> ThresholdConfig:
     return get_threshold_config()
 
 
-class RulService:
+class TireRulService:
     """Serve remaining-useful-life forecasts from the fitted prior plus a tire's own readings."""
 
-    def predict(self, request: RulPredictionRequest) -> RulPredictionResponse:
+    def predict(self, request: TireRulPredictionRequest) -> TireRulPredictionResponse:
         prior = _load_prior()
         thresholds = _load_thresholds()
         as_of = request.as_of_date or datetime.now(UTC).date()
@@ -89,10 +89,10 @@ class RulService:
         )
         report = scoring.tire_status_report(risk, thresholds, as_of)
 
-        return RulPredictionResponse(
+        return TireRulPredictionResponse(
             prediction_id=uuid4(),
             position=request.position,
-            rul_landings=RulQuantiles(
+            rul_landings=TireRulQuantiles(
                 p10=round(estimate.rul_p10, 1),
                 median=round(estimate.rul_median, 1),
                 p90=round(estimate.rul_p90, 1),
@@ -107,7 +107,7 @@ class RulService:
             landings_per_day=request.landings_per_day,
             readings_used=n_readings,
             low_confidence=estimate.low_confidence,
-            status=RulStatus(
+            status=TireRulStatus(
                 status=report.status,
                 severity=report.severity,
                 headline=report.headline,
@@ -119,4 +119,4 @@ class RulService:
         )
 
 
-rul_service = RulService()
+tire_rul_service = TireRulService()
