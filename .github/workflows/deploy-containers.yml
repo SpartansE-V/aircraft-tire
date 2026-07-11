@@ -4,7 +4,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "craft-detector-service/**"
+      - "app/**"
+      - "tests/**"
+      - "config/**"
+      - "artifacts/mixedlm_covariance.pkl"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - ".dockerignore"
       - "3d-reconstructor/**"
       - "web/**"
   workflow_dispatch: {}
@@ -63,7 +70,14 @@ jobs:
         with:
           filters: |
             app:
-              - 'craft-detector-service/**'
+              - 'app/**'
+              - 'tests/**'
+              - 'config/**'
+              - 'artifacts/mixedlm_covariance.pkl'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'Dockerfile'
+              - '.dockerignore'
             reconstructor:
               - '3d-reconstructor/**'
             web:
@@ -73,9 +87,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: craft-detector-service
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
@@ -103,7 +114,7 @@ jobs:
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
         run: |
-          docker build -t "$REGISTRY/aircraft-tire:${{ github.sha }}" craft-detector-service
+          docker build -t "$REGISTRY/aircraft-tire:${{ github.sha }}" .
           docker push "$REGISTRY/aircraft-tire:${{ github.sha }}"
 
       - uses: hashicorp/setup-terraform@v3
