@@ -236,18 +236,18 @@ class BedrockVlm:
         )
 
     def analyze(self, image: Image.Image) -> dict:
-        try:
-            from anthropic import AnthropicBedrockMantle
-        except ImportError as exc:
-            raise RuntimeError(
-                "BedrockVlm needs the Anthropic SDK with Bedrock support (pip install 'anthropic[bedrock]')."
-            ) from exc
         if not _aws_credentials_present():
             raise RuntimeError(
                 "BedrockVlm needs AWS credentials (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY, "
                 "AWS_PROFILE, or a configured ~/.aws)."
             )
-        client = AnthropicBedrockMantle(aws_region=self.region)
+        try:
+            from anthropic import AnthropicBedrock
+        except ImportError as exc:
+            raise RuntimeError(
+                "BedrockVlm needs the Anthropic SDK with Bedrock support (pip install 'anthropic[bedrock]')."
+            ) from exc
+        client = AnthropicBedrock(aws_region=self.region)
         msg = client.messages.create(
             model=self.model,
             max_tokens=300,

@@ -37,7 +37,11 @@ def agent_backend_available(backend: str) -> bool:
     if backend == "openai":
         return importlib.util.find_spec("openai") is not None and bool(os.environ.get("OPENAI_API_KEY"))
     if backend == "bedrock":
-        from app.rul.cv.assess import _aws_credentials_present
+        try:
+            # cv.assess needs the `ai` extra (PIL); without it Bedrock is simply unavailable.
+            from app.rul.cv.assess import _aws_credentials_present
+        except ImportError:
+            return False
 
         return importlib.util.find_spec("anthropic") is not None and _aws_credentials_present()
     return backend == "mock"
@@ -96,7 +100,11 @@ class MaintenanceAgent:
             if not msg.tool_calls:
                 return {"answer": msg.content or "", "trace": trace, "backend": f"openai:{model}"}
             messages.append(
-                {"role": "assistant", "content": msg.content or "", "tool_calls": [tc.model_dump() for tc in msg.tool_calls]}
+                {
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [tc.model_dump() for tc in msg.tool_calls],
+                }
             )
             for tc in msg.tool_calls:
                 args = json.loads(tc.function.arguments or "{}")
@@ -108,18 +116,17 @@ class MaintenanceAgent:
     # -- real agent: Claude on Amazon Bedrock (Mantle client, Messages-API tool-use loop) --
     def _chat_bedrock(self, history: list[dict]) -> dict:
         try:
-            from anthropic import AnthropicBedrockMantle
+            from anthropic import AnthropicBedrock
         except ImportError as exc:
             raise RuntimeError(
-                "The Bedrock agent needs the Anthropic SDK with Bedrock support "
-                "(pip install 'anthropic[bedrock]')."
+                "The Bedrock agent needs the Anthropic SDK with Bedrock support (pip install 'anthropic[bedrock]')."
             ) from exc
         from app.rul.agent.tools import anthropic_tool_schemas
 
         # Bedrock model IDs carry an `anthropic.` prefix.
         model = self.model or os.environ.get("BEDROCK_AGENT_MODEL", "anthropic.claude-opus-4-8")
         region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-east-1"
-        client = AnthropicBedrockMantle(aws_region=region)
+        client = AnthropicBedrock(aws_region=region)
         tools = anthropic_tool_schemas()
         messages: list = [{"role": m["role"], "content": m["content"]} for m in history]
         trace: list = []
@@ -221,7 +228,9 @@ class MaintenanceAgent:
         if damage:
             lines.append(f"- CV scan: **ACUTE DAMAGE — {', '.join(damage)}** (serial {scan.get('serial')}).")
         else:
-            lines.append(f"- CV scan: no acute damage; tread {scan.get('laser_groove_mm', '?')} mm (serial {scan.get('serial', '?')}).")
+            lines.append(
+                f"- CV scan: no acute damage; tread {scan.get('laser_groove_mm', '?')} mm (serial {scan.get('serial', '?')})."
+            )
         if not disp.get("dispatchable", True):
             lines.append(f"- Dispatch: **NO MEL RELIEF → AOG until replaced** (basis {disp.get('ref')}).")
         else:
