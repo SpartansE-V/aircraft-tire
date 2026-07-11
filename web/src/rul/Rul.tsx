@@ -104,7 +104,7 @@ export default function Rul() {
 
         {/* right: the selected wheel's condition + forecast */}
         <div className="lg:col-span-4">
-          <Card title="Wheel forecast" tag="GET /wheel/status">
+          <Card title="Wheel Remaining Useful Life Prediction" tag="GET /wheel/status">
             {selected ? (
               <SelectedWheel tail={selected.tail} position={selected.position} />
             ) : (
