@@ -1,29 +1,29 @@
-"""Shared pytest fixtures.
+"""Shared API test fixtures."""
 
-The full synthetic dataset is generated once per session (in memory, no disk I/O) and
-reused across tests. Generation is ~1s, so this keeps the suite fast without a small-fleet
-override — and it exercises the real, committed generator config.
-"""
-
-from __future__ import annotations
+from collections.abc import AsyncIterator
 
 import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
-from treadcast.config import get_generator_config, get_threshold_config
-from treadcast.generate_data import generate
-
-
-@pytest.fixture(scope="session")
-def gen_config():
-    return get_generator_config()
+from app.main import app
 
 
-@pytest.fixture(scope="session")
-def threshold_config():
-    return get_threshold_config()
+@pytest.fixture
+def nominal_payload() -> dict[str, object]:
+    return {
+        "gear": "main",
+        "touchdown_speed_ms": 69,
+        "landing_weight_kg": 62000,
+        "crosswind_kt": 6,
+        "taxi_distance_km": 2.8,
+        "outside_air_temperature_c": 30,
+        "under_inflation_pct": 0,
+    }
 
 
-@pytest.fixture(scope="session")
-def tables(gen_config):
-    """All generated tables, keyed by name (fleets, aircraft, tires, ...)."""
-    return generate(gen_config)
+@pytest_asyncio.fixture
+async def client() -> AsyncIterator[AsyncClient]:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+        yield test_client

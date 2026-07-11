@@ -1,4 +1,10 @@
-.env
 .DS_Store
+.env
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.venv/
 __pycache__/
 *.py[cod]
+.coverage
+htmlcov/
