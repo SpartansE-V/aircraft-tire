@@ -12,14 +12,14 @@ dependencies = [
     "python-multipart>=0.0.20,<1.0.0",
     "pyyaml>=6.0.0,<7.0.0",
     "uvicorn[standard]>=0.34.0,<1.0.0",
-    # Runtime for the RUL AI endpoint (app.rul.scoring is pure-numpy; config loads YAML).
+    # Runtime for the RUL AI endpoint (app.tire_rul.scoring is pure-numpy; config loads YAML).
     "numpy>=1.26,<2.1",
     "pyyaml>=6.0,<7.0",
 ]
 
 [project.optional-dependencies]
 # Full AI/ML stack: data generation, model training, CV, the LLM agent, and the Streamlit UI.
-# NOT needed to serve /api/v1/rul/predict (that path only needs numpy + pyyaml, in base deps).
+# NOT needed to serve /api/v1/tire_rul/predict (that path only needs numpy + pyyaml, in base deps).
 # Install with: `uv sync --extra ai`.
 ai = [
     "numpy>=1.26,<2.1",
@@ -70,7 +70,7 @@ extend-exclude = ["3d-reconstructor", "web", "infra"]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 # The AI research-pipeline tests are vendored at the AI package's original 120-char style
-# (see app/rul/ruff.toml). Backend tests follow the root style.
+# (see app/tire_rul/ruff.toml). Backend tests follow the root style.
 [tool.ruff.lint.per-file-ignores]
 "tests/test_agent.py" = ["E501"]
 "tests/test_cv.py" = ["E501"]
@@ -82,7 +82,7 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.format]
 exclude = [
-    "app/rul/**",
+    "app/tire_rul/**",
     "tests/test_agent.py",
     "tests/test_cv.py",
     "tests/test_evaluation.py",
@@ -98,14 +98,14 @@ strict = true
 plugins = ["pydantic.mypy"]
 pretty = true
 show_error_codes = true
-# The backend (app.main/api/domain/services/config) is strict-typed. app.rul is vendored
+# The backend (app.main/api/domain/services/config) is strict-typed. app.tire_rul is vendored
 # research/ML code with a different quality bar — excluded from strict checks below.
-exclude = ["^app/rul/"]
+exclude = ["^app/tire_rul/"]
 
 [[tool.mypy.overrides]]
 # Do not strict-check the AI package, and treat its symbols as untyped when imported
-# from the backend seam (app.services.rul_service).
-module = ["app.rul.*"]
+# from the backend seam (app.services.tire_rul_service).
+module = ["app.tire_rul.*"]
 ignore_errors = true
 follow_imports = "skip"
 

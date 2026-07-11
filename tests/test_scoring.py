@@ -10,9 +10,9 @@ from datetime import date, timedelta
 import numpy as np
 import pytest
 
-from app.rul import scoring
-from app.rul.constants import AlertCategory, AlertType, PressureLadderAction
-from app.rul.scoring import RulEstimate, WheelRisk
+from app.tire_rul import scoring
+from app.tire_rul.constants import AlertCategory, AlertType, PressureLadderAction
+from app.tire_rul.scoring import TireRulEstimate, WheelRisk
 
 PRIOR_MEAN = np.array([12.0, -0.035])
 PRIOR_COV = np.array([[0.7, 0.0], [0.0, 1e-4]])
@@ -112,7 +112,7 @@ def test_pressure_ladder_bands(threshold_config, pressure, expected):
 # ---------------------------------------------------------------------------
 def _make_estimate(*, p_cross, rul_median, rul_p10=None, p10_days=40, median_days=45, low_conf=False):
     rul_p10 = rul_median * 0.9 if rul_p10 is None else rul_p10
-    return RulEstimate(
+    return TireRulEstimate(
         rul_p10=rul_p10,
         rul_median=rul_median,
         rul_p90=rul_median * 1.1,

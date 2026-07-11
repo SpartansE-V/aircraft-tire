@@ -192,8 +192,8 @@ class HealthResponse(StrictSchema):
 
 
 # ---------------------------------------------------------------------------
-# RUL prediction (the AI endpoint) — contract for app.services.rul_service,
-# which is the only place the backend crosses into the app.rul model package.
+# RUL prediction (the AI endpoint) — contract for app.services.tire_rul_service,
+# which is the only place the backend crosses into the app.tire_rul model package.
 # ---------------------------------------------------------------------------
 WheelPositionValue = Literal[
     "nlg_l",
@@ -203,8 +203,8 @@ WheelPositionValue = Literal[
     "mlg_r_inbd",
     "mlg_r_outbd",
 ]
-RulStatusValue = Literal["healthy", "monitor", "schedule", "replace_now"]
-RulSeverityValue = Literal["info", "warning", "critical"]
+TireRulStatusValue = Literal["healthy", "monitor", "schedule", "replace_now"]
+TireRulSeverityValue = Literal["info", "warning", "critical"]
 
 MAX_READINGS = 200
 MAX_GROOVE_MM = 30.0
@@ -229,7 +229,7 @@ class InspectionReading(StrictSchema):
     )
 
 
-class RulPredictionRequest(StrictSchema):
+class TireRulPredictionRequest(StrictSchema):
     """A single wheel's readings and utilization for one remaining-useful-life forecast."""
 
     model_config = ConfigDict(
@@ -285,7 +285,7 @@ class RulPredictionRequest(StrictSchema):
     )
 
 
-class RulQuantiles(StrictSchema):
+class TireRulQuantiles(StrictSchema):
     p10: float = Field(description="Earliest-credible remaining landings (10th percentile).")
     median: float = Field(description="Expected remaining landings (50th percentile).")
     p90: float = Field(description="Latest-credible remaining landings (90th percentile).")
@@ -300,17 +300,19 @@ class WearToLimitDates(StrictSchema):
     p90: date = Field(description="Date the P90 (latest-credible) RUL is reached.")
 
 
-class RulStatus(StrictSchema):
-    status: RulStatusValue = Field(description="Overall wheel condition category.")
-    severity: RulSeverityValue = Field(description="Severity of the recommended attention level.")
+class TireRulStatus(StrictSchema):
+    status: TireRulStatusValue = Field(description="Overall wheel condition category.")
+    severity: TireRulSeverityValue = Field(
+        description="Severity of the recommended attention level."
+    )
     headline: str = Field(description="One-line plain-language condition summary.")
     recommended_action: str = Field(description="Suggested maintenance-planning action.")
 
 
-class RulPredictionResponse(StrictSchema):
+class TireRulPredictionResponse(StrictSchema):
     prediction_id: UUID = Field(description="Stateless UUID for correlating this prediction.")
     position: WheelPositionValue
-    rul_landings: RulQuantiles
+    rul_landings: TireRulQuantiles
     wear_to_limit_dates: WearToLimitDates
     p_cross_before_next_check: float = Field(
         description="Probability the wear limit is crossed before the next scheduled check."
@@ -320,7 +322,7 @@ class RulPredictionResponse(StrictSchema):
     low_confidence: bool = Field(
         description="True when too few readings were supplied and the fleet prior dominates."
     )
-    status: RulStatus
+    status: TireRulStatus
     wear_limit_mm: float = Field(
         description="Serviceable groove-depth limit used for the crossing."
     )
@@ -330,7 +332,7 @@ class RulPredictionResponse(StrictSchema):
 
 # ---------------------------------------------------------------------------
 # Maintenance Decision Agent — contract for app.services.agent_service, which
-# wraps app.rul.agent (LLM tool-calling over the fleet dataset) for the FE.
+# wraps app.tire_rul.agent (LLM tool-calling over the fleet dataset) for the FE.
 # ---------------------------------------------------------------------------
 AgentBackendValue = Literal["auto", "openai", "bedrock", "mock"]
 AgentRoleValue = Literal["user", "assistant"]
@@ -440,8 +442,8 @@ class WheelStatusResponse(StrictSchema):
 
     tail_number: str
     position: WheelPositionValue
-    status: RulStatusValue
-    severity: RulSeverityValue
+    status: TireRulStatusValue
+    severity: TireRulSeverityValue
     headline: str
     explanation: str
     recommended_action: str

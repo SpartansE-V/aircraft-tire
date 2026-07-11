@@ -11,8 +11,8 @@ from app.domain.schemas import (
     AgentChatRequest,
     AgentChatResponse,
     FleetWorklistResponse,
-    RulPredictionRequest,
-    RulPredictionResponse,
+    TireRulPredictionRequest,
+    TireRulPredictionResponse,
     WheelStatusResponse,
 )
 from app.services.agent_service import (
@@ -20,9 +20,10 @@ from app.services.agent_service import (
     AgentDataUnavailableError,
     agent_service,
 )
-from app.services.rul_service import rul_service
+from app.services.tire_rul_service import tire_rul_service
 
-router = APIRouter(prefix="/api/v1/rul", tags=["RUL Prediction"])
+# RUL stands for Remaining Useful Life
+router = APIRouter(prefix="/api/v1/tire_rul", tags=["Tire Remaining Useful Life Prediction"])
 
 _FLEET_UNAVAILABLE: dict[int | str, dict[str, Any]] = {
     503: {
@@ -39,7 +40,7 @@ def _fleet_unavailable_response(exc: AgentDataUnavailableError) -> JSONResponse:
 
 @router.post(
     "/predict",
-    response_model=RulPredictionResponse,
+    response_model=TireRulPredictionResponse,
     response_model_exclude_none=True,
     summary="Predict tire remaining useful life",
     description=(
@@ -54,8 +55,8 @@ def _fleet_unavailable_response(exc: AgentDataUnavailableError) -> JSONResponse:
         500: {"model": ErrorResponse, "description": "Unexpected server error."},
     },
 )
-async def predict_rul(request: RulPredictionRequest) -> RulPredictionResponse:
-    return rul_service.predict(request)
+async def predict_rul(request: TireRulPredictionRequest) -> TireRulPredictionResponse:
+    return tire_rul_service.predict(request)
 
 
 # The agent/fleet handlers are sync (`def`) on purpose: FastAPI runs them in its threadpool,

@@ -11,7 +11,7 @@ from datetime import date, timedelta
 import pandas as pd
 import pytest
 
-from app.rul.agent import (
+from app.tire_rul.agent import (
     TOOL_FUNCS,
     TOOL_SCHEMAS,
     MaintenanceAgent,
@@ -19,15 +19,15 @@ from app.rul.agent import (
     agent_backend_available,
     call_tool,
 )
-from app.rul.agent.tools import _norm_pos
-from app.rul.config import get_threshold_config
-from app.rul.scoring import RulEstimate, WheelRisk
+from app.tire_rul.agent.tools import _norm_pos
+from app.tire_rul.config import get_threshold_config
+from app.tire_rul.scoring import TireRulEstimate, WheelRisk
 
 AS_OF = date(2025, 1, 1)
 
 
 def _est(rul_median, p10_days, p_cross):
-    return RulEstimate(
+    return TireRulEstimate(
         rul_p10=rul_median * 0.9,
         rul_median=rul_median,
         rul_p90=rul_median * 1.1,
@@ -151,7 +151,7 @@ def test_tool_schemas_match_funcs():
 
 # --- Bedrock backend ---
 def test_anthropic_tool_schemas_conversion():
-    from app.rul.agent.tools import anthropic_tool_schemas
+    from app.tire_rul.agent.tools import anthropic_tool_schemas
 
     schemas = anthropic_tool_schemas()
     assert len(schemas) == len(TOOL_FUNCS)
@@ -162,7 +162,7 @@ def test_anthropic_tool_schemas_conversion():
 
 
 def test_agent_backend_available_bedrock(monkeypatch):
-    from app.rul.cv import assess
+    from app.tire_rul.cv import assess
 
     monkeypatch.setattr(assess, "_aws_credentials_present", lambda: True)
     assert agent_backend_available("bedrock") is True  # anthropic SDK installed + creds
@@ -171,7 +171,7 @@ def test_agent_backend_available_bedrock(monkeypatch):
 
 
 def test_agent_auto_prefers_openai_then_bedrock(ctx, monkeypatch):
-    from app.rul.cv import assess
+    from app.tire_rul.cv import assess
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setattr(assess, "_aws_credentials_present", lambda: True)

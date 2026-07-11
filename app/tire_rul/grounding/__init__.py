@@ -8,13 +8,13 @@ records into the structured tire schema, linked by serial). Knowledge lives in
 extraction can be validated against ground truth.
 """
 
-from app.rul.grounding.amm import grounded_thresholds, load_knowledge
-from app.rul.grounding.defect_logs import (
+from app.tire_rul.grounding.amm import grounded_thresholds, load_knowledge
+from app.tire_rul.grounding.defect_logs import (
     POSITION_ALIASES,
     extract_defect_log,
     render_defect_log_line,
 )
-from app.rul.grounding.mel import DispatchDecision, dispatch_for_wheel, system_dispatch
+from app.tire_rul.grounding.mel import DispatchDecision, dispatch_for_wheel, system_dispatch
 
 __all__ = [
     "DispatchDecision",

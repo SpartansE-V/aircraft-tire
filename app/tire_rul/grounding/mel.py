@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.rul.grounding.amm import load_knowledge
+from app.tire_rul.grounding.amm import load_knowledge
 
 
 @dataclass

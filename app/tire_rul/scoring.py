@@ -113,7 +113,7 @@ def monte_carlo_crossing(
 
 
 @dataclass(frozen=True)
-class RulEstimate:
+class TireRulEstimate:
     rul_p10: float
     rul_median: float
     rul_p90: float
@@ -164,7 +164,7 @@ def estimate_wheel(
     next_check_cycles: int,
     n_readings: int,
     low_confidence_min_readings: int,
-) -> RulEstimate:
+) -> TireRulEstimate:
     """End-to-end per-wheel RUL + wear-to-limit dates + P(cross before next check)."""
     mean, cov = eb_posterior(cycles, grooves, prior_mean, prior_cov, scale)
     crossings = monte_carlo_crossing(mean, cov, limit_mm, mc_draws, mc_seed)
@@ -172,7 +172,7 @@ def estimate_wheel(
     p_cross = p_cross_within(crossings, current_cycles, next_check_cycles)
     finite = crossings[np.isfinite(crossings)]
     crossing_median = float(np.percentile(finite, 50)) if finite.size else float("inf")
-    return RulEstimate(
+    return TireRulEstimate(
         rul_p10=q["p10"],
         rul_median=q["median"],
         rul_p90=q["p90"],
@@ -247,7 +247,7 @@ class WheelRisk:
     station: str
     on_hand: int
     cycles_per_day: float
-    estimate: RulEstimate
+    estimate: TireRulEstimate
     hard_landings_recent: int = 0
     pressure_pct: float | None = None
     pressure_action: str = PressureLadderAction.OK.value
@@ -297,7 +297,7 @@ def _reason_and_action(risk: WheelRisk, tc: ThresholdConfig) -> tuple[str, str]:
     return "; ".join(bits), action
 
 
-def _today_from(est: RulEstimate) -> date:
+def _today_from(est: TireRulEstimate) -> date:
     """Recover the as-of date: date_p10 is as_of + p10_rul/lpd, so back it out."""
     return est.date_p10 - timedelta(days=min(est.rul_p10 / max(est.landings_per_day, 1e-6), MAX_HORIZON_DAYS))
 

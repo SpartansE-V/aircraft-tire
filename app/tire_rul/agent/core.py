@@ -16,7 +16,7 @@ import json
 import os
 import re
 
-from app.rul.agent.tools import TOOL_SCHEMAS, ToolContext, _norm_pos, call_tool
+from app.tire_rul.agent.tools import TOOL_SCHEMAS, ToolContext, _norm_pos, call_tool
 
 SYSTEM_PROMPT = (
     "You are TreadCast's aircraft-tire maintenance agent, chatting with a line engineer. "
@@ -39,7 +39,7 @@ def agent_backend_available(backend: str) -> bool:
     if backend == "bedrock":
         try:
             # cv.assess needs the `ai` extra (PIL); without it Bedrock is simply unavailable.
-            from app.rul.cv.assess import _aws_credentials_present
+            from app.tire_rul.cv.assess import _aws_credentials_present
         except ImportError:
             return False
 
@@ -121,7 +121,7 @@ class MaintenanceAgent:
             raise RuntimeError(
                 "The Bedrock agent needs the Anthropic SDK with Bedrock support (pip install 'anthropic[bedrock]')."
             ) from exc
-        from app.rul.agent.tools import anthropic_tool_schemas
+        from app.tire_rul.agent.tools import anthropic_tool_schemas
 
         # Bedrock model IDs carry an `anthropic.` prefix.
         model = self.model or os.environ.get("BEDROCK_AGENT_MODEL", "anthropic.claude-opus-4-8")
