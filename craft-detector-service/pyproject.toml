@@ -107,5 +107,5 @@ ignore_errors = true
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
-module = ["inference_sdk.*"]
+module = ["inference_sdk.*", "pandas.*"]
 ignore_missing_imports = true

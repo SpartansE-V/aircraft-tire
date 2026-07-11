@@ -1,10 +1,10 @@
 """Strict public request and response schemas."""
 
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 GearValue = Literal["main", "nose"]
 SeverityLevel = Literal["LOW", "MODERATE", "HIGH", "CRITICAL"]
@@ -325,6 +325,137 @@ class RulPredictionResponse(StrictSchema):
         description="Serviceable groove-depth limit used for the crossing."
     )
     model_version: str
+    disclaimer: str
+
+
+# ---------------------------------------------------------------------------
+# Maintenance Decision Agent — contract for app.services.agent_service, which
+# wraps app.rul.agent (LLM tool-calling over the fleet dataset) for the FE.
+# ---------------------------------------------------------------------------
+AgentBackendValue = Literal["auto", "openai", "bedrock", "mock"]
+AgentRoleValue = Literal["user", "assistant"]
+
+MAX_AGENT_MESSAGES = 40
+MAX_AGENT_MESSAGE_CHARS = 4000
+MAX_WORKLIST_TOP_N = 50
+
+
+class AgentChatMessage(StrictSchema):
+    """One turn of the engineer/agent conversation."""
+
+    role: AgentRoleValue = Field(description="Who wrote the turn: the engineer or the agent.")
+    content: str = Field(
+        min_length=1,
+        max_length=MAX_AGENT_MESSAGE_CHARS,
+        description="Turn text. Assistant turns are the agent's earlier Markdown answers.",
+    )
+
+
+class AgentChatRequest(StrictSchema):
+    """Full conversation history, ending with the newest engineer message."""
+
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "messages": [
+                        {"role": "user", "content": "What should I do about VN-A320 MLG L INBD?"}
+                    ],
+                    "backend": "auto",
+                }
+            ]
+        },
+    )
+
+    messages: list[AgentChatMessage] = Field(
+        min_length=1,
+        max_length=MAX_AGENT_MESSAGES,
+        description=(
+            "Conversation so far, oldest first, ending with the newest user message. Send the "
+            "full history each call — the API is stateless and follow-ups may reference earlier "
+            "turns ('predict it')."
+        ),
+    )
+    backend: AgentBackendValue = Field(
+        default="auto",
+        description=(
+            "Agent backend: 'auto' picks the first configured LLM (OpenAI, then Bedrock) and "
+            "falls back to the offline deterministic planner ('mock')."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _last_message_is_user(self) -> "AgentChatRequest":
+        if self.messages[-1].role != "user":
+            raise ValueError("messages must end with a 'user' message")
+        return self
+
+
+class AgentToolCall(StrictSchema):
+    """One pipeline tool the agent invoked while investigating, with its raw result."""
+
+    tool: str = Field(description="Tool name (e.g. get_wheel_status, run_rul_prediction).")
+    args: dict[str, Any] = Field(description="Arguments the agent passed to the tool.")
+    result: dict[str, Any] = Field(description="JSON result the tool returned to the agent.")
+
+
+class AgentChatResponse(StrictSchema):
+    chat_id: UUID = Field(description="Stateless UUID for correlating this exchange.")
+    answer: str = Field(description="The agent's grounded answer, in Markdown.")
+    trace: list[AgentToolCall] = Field(
+        description="Ordered tool-call trace behind the answer (render as 'how it investigated')."
+    )
+    backend: str = Field(description="Backend that produced the answer, e.g. 'openai:gpt-4o-mini'.")
+    as_of_date: date = Field(description="Fleet snapshot date the tools answered from.")
+    disclaimer: str
+
+
+class PriorityWheel(StrictSchema):
+    """One row of the ranked maintenance worklist."""
+
+    rank: int
+    tail_number: str
+    position: WheelPositionValue
+    station: str = Field(description="Home station of the aircraft (spares are held per station).")
+    priority: float = Field(description="Composite priority: P(cross before check) x consequence.")
+    p_cross_before_next_check: float
+    rul_median_landings: float
+    rul_p10_landings: float
+    earliest_credible_date: date
+    low_confidence: bool
+    reason: str = Field(description="Why this wheel ranks here (plain language).")
+    action: str = Field(description="Recommended planning action.")
+
+
+class FleetWorklistResponse(StrictSchema):
+    as_of_date: date
+    wheels: list[PriorityWheel]
+    disclaimer: str
+
+
+class WheelStatusResponse(StrictSchema):
+    """Current condition + forecast for one mounted wheel of the fleet dataset."""
+
+    tail_number: str
+    position: WheelPositionValue
+    status: RulStatusValue
+    severity: RulSeverityValue
+    headline: str
+    explanation: str
+    recommended_action: str
+    rul_median_landings: float
+    rul_p10_landings: float
+    earliest_credible_date: date
+    p_cross_before_next_check: float
+    pressure_pct: float | None
+    pressure_action: str
+    station: str
+    spares_on_hand: int
+    utilization_landings_per_day: float
+    low_confidence: bool
+    as_of_date: date
     disclaimer: str
 
 

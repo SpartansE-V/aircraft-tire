@@ -144,26 +144,24 @@ def check_dispatch(ctx: ToolContext, tail: str, position: str) -> dict:
 def get_amm_thresholds(ctx: ToolContext) -> dict:
     return {
         "thresholds": [
-            {"name": r["threshold"], "value": r["config"], "amm_ref": r["amm_ref"]}
-            for r in grounded_thresholds(ctx.tc)
+            {"name": r["threshold"], "value": r["config"], "amm_ref": r["amm_ref"]} for r in grounded_thresholds(ctx.tc)
         ]
     }
 
 
 def check_spares(ctx: ToolContext, station: str) -> dict:
-    stock = dict(
-        zip(ctx.tables["station_stock"]["station_code"], ctx.tables["station_stock"]["on_hand"], strict=False)
-    )
+    stock = dict(zip(ctx.tables["station_stock"]["station_code"], ctx.tables["station_stock"]["on_hand"], strict=False))
     demand = scoring.spares_demand(ctx.risks, stock, ctx.as_of, weeks=8)
     sd = [d for d in demand if d.station == station]
     stockout = next((d.week_start.isoformat() for d in sd if d.projected_stockout), None)
+    on_hand = stock.get(station)
     return {
         "station": station,
-        "on_hand": stock.get(station),
+        # Cast off pandas' numpy scalar so the result stays JSON-serializable (LLM loop + API).
+        "on_hand": None if on_hand is None else int(on_hand),
         "projected_stockout_week": stockout,
         "next_weeks": [
-            {"week": d.week_start.isoformat(), "expected": d.expected_demand, "p90": d.p90_demand}
-            for d in sd[:6]
+            {"week": d.week_start.isoformat(), "expected": d.expected_demand, "p90": d.p90_demand} for d in sd[:6]
         ],
     }
 
@@ -212,9 +210,7 @@ def get_damage_area(ctx: ToolContext, tail: str, position: str) -> dict:
     }
 
 
-def run_rul_prediction(
-    ctx: ToolContext, tail: str, position: str, utilization_override: float | None = None
-) -> dict:
+def run_rul_prediction(ctx: ToolContext, tail: str, position: str, utilization_override: float | None = None) -> dict:
     """Trigger a fresh RUL prediction (EB posterior + Monte-Carlo first-passage) for a wheel.
 
     With `utilization_override` (landings/day) the wear-to-limit dates are recomputed under that
@@ -235,11 +231,19 @@ def run_rul_prediction(
         rc = g["cycles_since_install"].to_numpy(dtype=float)
         rg = g["measured_groove_mm"].to_numpy(dtype=float)
         e = scoring.estimate_wheel(
-            rc, rg, pmean, pcov, scale,
+            rc,
+            rg,
+            pmean,
+            pcov,
+            scale,
             current_cycles=float(rc[-1]) if len(rc) else 0.0,
-            landings_per_day=lpd, as_of_date=ctx.as_of, limit_mm=ctx.tc.wear_limit_mm,
-            mc_draws=ctx.tc.mc_draws, mc_seed=ctx.tc.mc_seed,
-            next_check_cycles=ctx.tc.next_check_interval_cycles, n_readings=len(g),
+            landings_per_day=lpd,
+            as_of_date=ctx.as_of,
+            limit_mm=ctx.tc.wear_limit_mm,
+            mc_draws=ctx.tc.mc_draws,
+            mc_seed=ctx.tc.mc_seed,
+            next_check_cycles=ctx.tc.next_check_interval_cycles,
+            n_readings=len(g),
             low_confidence_min_readings=ctx.tc.low_confidence_min_readings,
         )
         triggered = True
@@ -299,24 +303,55 @@ _I = {"type": "integer"}
 
 # OpenAI function-calling schemas for the tools above.
 TOOL_SCHEMAS = [
-    _fn("list_priority_wheels", "Fleet-wide (or per-station) ranked worklist of wheels needing attention.",
-        {"top_n": _I, "station": _S}, []),
-    _fn("get_wheel_status", "RUL, wear-to-limit dates, pressure, station, spares and status for one wheel.",
-        {"tail": _S, "position": _S}, ["tail", "position"]),
-    _fn("get_tire_scan", "Latest CV scan for a wheel: laser tread depth, VLM damage findings, OCR serial.",
-        {"tail": _S, "position": _S}, ["tail", "position"]),
-    _fn("get_damage_area", "Locate damage regions on the wheel's scan: type, pixel bounding box, and tread location (e.g. 'upper center tread').",
-        {"tail": _S, "position": _S}, ["tail", "position"]),
-    _fn("run_rul_prediction", "Trigger a fresh RUL prediction (Monte-Carlo) for a wheel; optional utilization_override in landings/day re-dates the forecast.",
-        {"tail": _S, "position": _S, "utilization_override": {"type": "number"}}, ["tail", "position"]),
-    _fn("check_dispatch", "MEL/CDL dispatch decision for a wheel (dispatchable? category, rectification days).",
-        {"tail": _S, "position": _S}, ["tail", "position"]),
-    _fn("get_amm_thresholds", "The AMM-sourced thresholds the tool uses (wear limit, pressure ladder, etc.).",
-        {}, []),
-    _fn("check_spares", "Spare-tire availability and projected weekly demand / stock-out for a station.",
-        {"station": _S}, ["station"]),
-    _fn("search_defect_history", "Search historical free-text defect logs (by tail, serial, or keyword).",
-        {"query": _S}, ["query"]),
+    _fn(
+        "list_priority_wheels",
+        "Fleet-wide (or per-station) ranked worklist of wheels needing attention.",
+        {"top_n": _I, "station": _S},
+        [],
+    ),
+    _fn(
+        "get_wheel_status",
+        "RUL, wear-to-limit dates, pressure, station, spares and status for one wheel.",
+        {"tail": _S, "position": _S},
+        ["tail", "position"],
+    ),
+    _fn(
+        "get_tire_scan",
+        "Latest CV scan for a wheel: laser tread depth, VLM damage findings, OCR serial.",
+        {"tail": _S, "position": _S},
+        ["tail", "position"],
+    ),
+    _fn(
+        "get_damage_area",
+        "Locate damage regions on the wheel's scan: type, pixel bounding box, and tread location (e.g. 'upper center tread').",
+        {"tail": _S, "position": _S},
+        ["tail", "position"],
+    ),
+    _fn(
+        "run_rul_prediction",
+        "Trigger a fresh RUL prediction (Monte-Carlo) for a wheel; optional utilization_override in landings/day re-dates the forecast.",
+        {"tail": _S, "position": _S, "utilization_override": {"type": "number"}},
+        ["tail", "position"],
+    ),
+    _fn(
+        "check_dispatch",
+        "MEL/CDL dispatch decision for a wheel (dispatchable? category, rectification days).",
+        {"tail": _S, "position": _S},
+        ["tail", "position"],
+    ),
+    _fn("get_amm_thresholds", "The AMM-sourced thresholds the tool uses (wear limit, pressure ladder, etc.).", {}, []),
+    _fn(
+        "check_spares",
+        "Spare-tire availability and projected weekly demand / stock-out for a station.",
+        {"station": _S},
+        ["station"],
+    ),
+    _fn(
+        "search_defect_history",
+        "Search historical free-text defect logs (by tail, serial, or keyword).",
+        {"query": _S},
+        ["query"],
+    ),
 ]
 
 

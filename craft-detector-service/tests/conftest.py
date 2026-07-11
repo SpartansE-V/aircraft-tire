@@ -24,6 +24,7 @@ collect_ignore: list[str] = []
 if importlib.util.find_spec("pandas") is None:
     collect_ignore += [
         "test_agent.py",
+        "test_agent_api.py",
         "test_evaluation.py",
         "test_features.py",
         "test_generator.py",
