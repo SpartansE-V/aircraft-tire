@@ -9,6 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 ARG OPENAI_API_KEY
 
+
 WORKDIR /app
 
 # opencv-python (pulled in by inference-sdk) needs libGL/glib at import time,
