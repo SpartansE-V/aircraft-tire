@@ -30,10 +30,12 @@ README.md
 # Tests aren't needed at runtime
 tests
 
-# Synthetic training data and heavy research artifacts — not needed to serve the API.
+# Heavy research artifacts — not needed to serve the API.
 # Everything under app/tire_rul is pulled in by `COPY app ./app`, so the heavy inputs are
 # excluded here; only app/tire_rul/artifacts/mixedlm_covariance.pkl (the fitted prior) survives.
-app/tire_rul/data
+# The CORE_TABLES parquet files (fleets, aircraft, tires, etc.) are included for fleet endpoints.
+app/tire_rul/data/_ground_truth.parquet
+app/tire_rul/data/scans/
 app/tire_rul/artifacts/mixedlm.pkl
 app/tire_rul/artifacts/lightgbm.txt
 app/tire_rul/artifacts/weibull_aft.pkl
