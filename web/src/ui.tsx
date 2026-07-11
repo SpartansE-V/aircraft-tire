@@ -46,6 +46,7 @@ export const STATUS = {
 const TABS = [
   { path: '/tyres', label: 'Tyres' },
   { path: '/simulate-landing', label: 'Simulate landing' },
+  { path: '/engineer-chat', label: 'Engineer Chat' },
 ]
 
 export function Header({
