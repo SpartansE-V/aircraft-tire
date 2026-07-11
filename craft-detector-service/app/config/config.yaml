@@ -1,0 +1,12 @@
+roboflow:
+  api_url: "https://serverless.roboflow.com"
+  image_fetch_timeout_seconds: 30
+  max_upload_bytes: 10485760
+  tyre_quality:
+    model_id: "tyre-quality-qccvy/1"
+    model_confidence_threshold: 0.2
+    filter_confidence_threshold: 0.5
+  tread_depth:
+    model_id: "tyre_tread_depth_set/1"
+    model_confidence_threshold: 0.2
+    filter_confidence_threshold: 0.5

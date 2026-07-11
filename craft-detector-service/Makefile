@@ -1,4 +1,4 @@
-.PHONY: install run test lint format-check type-check compile check docker-build
+.PHONY: install run test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
 
 install:
 	uv sync
@@ -25,3 +25,12 @@ check: format-check lint type-check test compile
 
 docker-build:
 	docker build -t wear-severity-api .
+
+docker-up:
+	docker compose -f ../docker-compose.yml up --build -d
+
+docker-down:
+	docker compose -f ../docker-compose.yml down
+
+docker-logs:
+	docker compose -f ../docker-compose.yml logs -f api

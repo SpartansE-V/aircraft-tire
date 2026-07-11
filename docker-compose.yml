@@ -4,6 +4,7 @@ services:
     environment:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       PORT: ${PORT:-8000}
+      ROBOFLOW__API_KEY: ${ROBOFLOW__API_KEY:-}
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     restart: unless-stopped
