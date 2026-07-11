@@ -6,6 +6,16 @@ variable "aws_region" {
   type = string
 }
 
+variable "cluster_id" {
+  description = "Shared ECS cluster ID this service runs on."
+  type        = string
+}
+
+variable "cluster_name" {
+  description = "Shared ECS cluster name (used for the autoscaling target's resource_id)."
+  type        = string
+}
+
 variable "vpc_id" {
   type = string
 }
@@ -46,8 +56,13 @@ variable "desired_count" {
   type = number
 }
 
-variable "cors_origins" {
-  type = string
+variable "environment" {
+  description = "Container environment variables."
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default = []
 }
 
 variable "tags" {

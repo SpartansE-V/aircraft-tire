@@ -27,10 +27,10 @@ docker-build:
 	docker build -t wear-severity-api .
 
 docker-up:
-	docker compose up --build -d
+	docker compose -f ../docker-compose.yml up --build -d
 
 docker-down:
-	docker compose down
+	docker compose -f ../docker-compose.yml down
 
 docker-logs:
-	docker compose logs -f api
+	docker compose -f ../docker-compose.yml logs -f api

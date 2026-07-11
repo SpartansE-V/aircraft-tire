@@ -1,6 +1,6 @@
 services:
   api:
-    build: .
+    build: ./craft-detector-service
     environment:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       PORT: ${PORT:-8000}
