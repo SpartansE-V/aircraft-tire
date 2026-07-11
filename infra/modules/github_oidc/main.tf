@@ -155,60 +155,15 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "ec2:*InternetGateway*", "ec2:*NatGateway*", "ec2:*Eip*", "ec2:*Address*",
       "ec2:*SecurityGroup*", "ec2:DescribeAvailabilityZones", "ec2:DescribeTags",
       "ec2:CreateTags", "ec2:DeleteTags",
-      "ec2:*LaunchTemplate*", "ec2:*Instances", "ec2:RunInstances",
-      "ec2:TerminateInstances", "ec2:DescribeInstances", "ec2:DescribeImages",
       "elasticloadbalancing:*",
       "ecs:*",
       "ecr:*",
       "logs:*",
       "application-autoscaling:*",
-      "autoscaling:*",
-      "ssm:GetParameter", "ssm:GetParameters",
       "iam:GetRole", "iam:GetRolePolicy", "iam:GetOpenIDConnectProvider",
       "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
-      "iam:GetInstanceProfile", "iam:ListInstanceProfilesForRole",
     ]
     resources = ["*"]
-  }
-
-  # The GPU capacity provider's EC2 instance role/profile (reconstructor
-  # only) - scoped by name, same pattern as ManageECSTaskRoles below.
-  statement {
-    sid    = "ManageGpuInstanceRole"
-    effect = "Allow"
-    actions = [
-      "iam:CreateRole",
-      "iam:DeleteRole",
-      "iam:UpdateRole",
-      "iam:UpdateAssumeRolePolicy",
-      "iam:AttachRolePolicy",
-      "iam:DetachRolePolicy",
-      "iam:TagRole",
-      "iam:UntagRole",
-      "iam:CreateInstanceProfile",
-      "iam:DeleteInstanceProfile",
-      "iam:AddRoleToInstanceProfile",
-      "iam:RemoveRoleFromInstanceProfile",
-      "iam:TagInstanceProfile",
-    ]
-    resources = [
-      "arn:aws:iam::*:role/${var.project_name}*-gpu-ecs-instance-role",
-      "arn:aws:iam::*:instance-profile/${var.project_name}*-gpu-ecs-instance-profile",
-    ]
-  }
-
-  # aws_iam_role_policy_attachment.ecs_instance passes the EC2 instance role
-  # to launched instances - needs iam:PassRole scoped to that one role.
-  statement {
-    sid       = "PassGpuInstanceRole"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = ["arn:aws:iam::*:role/${var.project_name}*-gpu-ecs-instance-role"]
-    condition {
-      test     = "StringEquals"
-      variable = "iam:PassedToService"
-      values   = ["ec2.amazonaws.com"]
-    }
   }
 
   # ECS task execution/task roles (one pair per service, e.g. aircraft-tire
