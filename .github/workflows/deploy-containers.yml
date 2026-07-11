@@ -8,6 +8,12 @@ on:
       - "3d-reconstructor/**"
   workflow_dispatch: {}
 
+# Shares a concurrency group with infra.yml - both run `terraform apply`
+# against the same state/lock, and a single push can trigger both at once.
+concurrency:
+  group: terraform-aircraft-tire
+  cancel-in-progress: false
+
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read

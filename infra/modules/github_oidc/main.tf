@@ -128,6 +128,21 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     resources = ["arn:aws:dynamodb:${var.aws_region}:*:table/${var.tfstate_lock_table}"]
   }
 
+  # This policy (and the role it's attached to) are part of the stack too -
+  # future applies of this file need to be able to update themselves.
+  statement {
+    sid    = "SelfManage"
+    effect = "Allow"
+    actions = [
+      "iam:GetRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+    ]
+    resources = [aws_iam_role.github_actions_deploy.arn]
+  }
+
   # Terraform apply itself needs to manage the VPC/ALB/ECS/ECR/IAM resources
   # this stack owns. Kept broad (not resource-scoped) because Terraform must
   # be able to create/read/update/delete all resource types in this file set;
