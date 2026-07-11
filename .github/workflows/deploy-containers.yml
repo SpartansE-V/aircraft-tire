@@ -6,6 +6,7 @@ on:
     paths:
       - "craft-detector-service/**"
       - "3d-reconstructor/**"
+      - "web/**"
   workflow_dispatch: {}
 
 # Shares a concurrency group with infra.yml - both run `terraform apply`
@@ -17,16 +18,44 @@ concurrency:
 permissions:
   id-token: write # required for OIDC -> AWS role assumption
   contents: read
+  actions: read # required to poll infra.yml's run status below
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION }}
 
 jobs:
+  # The concurrency group above only guarantees these two workflows don't
+  # apply at the same time - it doesn't guarantee infra.yml goes first. Make
+  # that explicit: if a "Deploy Infra" run is in progress or queued, wait for
+  # it, since it applies the whole stack and could otherwise clobber
+  # in-flight per-service changes made here (or vice versa).
+  wait-for-infra:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for Deploy Infra to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 60); do
+            in_flight=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow infra.yml \
+              --json status --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length')
+            if [ "$in_flight" = "0" ]; then
+              echo "No Deploy Infra run in progress, proceeding."
+              exit 0
+            fi
+            echo "Deploy Infra is running ($in_flight), waiting 15s... ($i/60)"
+            sleep 15
+          done
+          echo "Timed out waiting for Deploy Infra to finish"
+          exit 1
+
   changes:
+    needs: wait-for-infra
     runs-on: ubuntu-latest
     outputs:
       app: ${{ steps.filter.outputs.app }}
       reconstructor: ${{ steps.filter.outputs.reconstructor }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -37,6 +66,8 @@ jobs:
               - 'craft-detector-service/**'
             reconstructor:
               - '3d-reconstructor/**'
+            web:
+              - 'web/**'
 
   test-app:
     needs: changes
@@ -89,6 +120,12 @@ jobs:
           terraform apply -auto-approve \
             -target='module.ecs["app"]' \
             -var="image_tag_app=${{ github.sha }}"
+
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### app deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -json alb_dns_names | jq -r '.app')" >> "$GITHUB_STEP_SUMMARY"
 
   test-reconstructor:
     needs: changes
@@ -143,3 +180,72 @@ jobs:
           terraform apply -auto-approve \
             -target='module.ecs["reconstructor"]' \
             -var="image_tag_reconstructor=${{ github.sha }}"
+
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### reconstructor deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -json alb_dns_names | jq -r '.reconstructor')" >> "$GITHUB_STEP_SUMMARY"
+
+  test-web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  deploy-web:
+    needs: [changes, test-web]
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/aircraft-tire-web:${{ github.sha }}" web
+          docker push "$REGISTRY/aircraft-tire-web:${{ github.sha }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Deploy web service
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -target='module.ecs["web"]' \
+            -var="image_tag_web=${{ github.sha }}"
+
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### web deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -json alb_dns_names | jq -r '.web')" >> "$GITHUB_STEP_SUMMARY"
