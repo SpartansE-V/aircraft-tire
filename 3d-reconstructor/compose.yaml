@@ -1,0 +1,44 @@
+name: colmap-api
+
+x-api-common: &api-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: spartans-ex/colmap-api:local
+  platform: ${DOCKER_PLATFORM:-linux/amd64}
+  environment:
+    COLMAP_BINARY: colmap
+    COLMAP_WORKSPACE_ROOT: /app/workspace
+    COLMAP_IMAGES_ROOT: ${COLMAP_IMAGES_ROOT:-/app/workspace/images}
+    COLMAP_OUTPUTS_ROOT: /app/workspace/runs
+    COLMAP_DEFAULT_CAMERA_MODEL: ${COLMAP_DEFAULT_CAMERA_MODEL:-SIMPLE_RADIAL}
+    COLMAP_DEFAULT_MATCHER: ${COLMAP_DEFAULT_MATCHER:-exhaustive}
+  volumes:
+    - ./workspace:/app/workspace
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+
+services:
+  api:
+    <<: *api-common
+    container_name: colmap-api
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  api-gpu:
+    <<: *api-common
+    container_name: colmap-api-gpu
+    profiles:
+      - gpu
+    ports:
+      - "${API_PORT:-8000}:8000"
+    gpus:
+      - driver: nvidia
+        count: all
+        capabilities:
+          - gpu
