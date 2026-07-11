@@ -426,6 +426,10 @@ def main() -> None:
           f"{len(tables['inspection_records'])} inspections, "
           f"{len(tables['operational_cycles'])} operational cycles to {paths.DATA_DIR}")
     print("Outcome mix:", {k: round(v, 3) for k, v in mix.items()})
+    # Link mock-tyre scan packs (status / model_type / 3D defects) onto current tires.
+    from app.tire_rul.enrich_tire_assets import enrich_tires
+
+    enrich_tires(seed=cfg.seed)
 
 
 # Convenience for tests: a small-fleet config override.

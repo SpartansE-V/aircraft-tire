@@ -36,11 +36,24 @@ export type FlightConditions = {
   crosswind_factor: number
 }
 
+// Raw NGAFID flight-data-recorder sensors that physically drive tire wear. Only these five of the
+// dataset's 23 channels couple to the tire (spin-up scrub, touchdown load, thermal wear); the
+// electrical/fuel/engine channels describe powerplant health and are not sent. Units are raw sensor
+// values, not normalized factors — the backend converts them to a position-weighted multiplier.
+export type NgafidFlightSensors = {
+  indicated_airspeed_kt: number // IAS — touchdown airspeed
+  vertical_speed_fpm: number // VSpd — sink rate at touchdown
+  normal_acceleration_g: number // NormAc — measured landing g
+  outside_air_temperature_c: number // OAT — outside air temperature
+  altitude_msl_ft: number // AltMSL — field/pressure altitude
+}
+
 export type RulPredictionRequest = {
   position: WheelPosition
   current_cycles: number
   planned_landings?: number
   flight_conditions?: FlightConditions
+  flight_sensors?: NgafidFlightSensors
   landings_per_day: number
   readings: InspectionReading[]
   as_of_date?: string // ISO YYYY-MM-DD
@@ -69,6 +82,7 @@ export type RulPredictionResponse = {
   p_cross_before_next_check: number
   landings_per_day: number
   wear_exposure_multiplier: number
+  sensor_wear_multiplier: number
   effective_planned_landings: number
   readings_used: number
   low_confidence: boolean
@@ -213,6 +227,114 @@ export function useWheelStatus(
     queryKey: ['rul-wheel', tail, position],
     queryFn: () => fetchWheelStatus(tail as string, position as WheelPosition),
     enabled: tail !== null && position !== null,
+    retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
+    staleTime: 60_000,
+  })
+}
+
+// --- /tyres dashboard: fleet tires with scan status + 3D defects ---
+
+export type ScanStatus = 'healthy' | 'warning' | 'error'
+export type TireModelType = 'radial' | 'type_vii' | 'type_iii'
+
+export type TireDefect3D = {
+  kind: 'wear' | 'damage'
+  label: string
+  severity: 'low' | 'med' | 'high'
+  zone: string
+  category?: string | null
+  source?: string | null
+  angle_rad?: number | null
+  lateral_pct?: number | null
+  at: [number, number, number] | number[]
+  r: number
+  wave?: boolean
+}
+
+export type ScanAnnotation2D = {
+  category: 'crack' | 'tread-shallow'
+  label: string | null
+  bbox: number[]
+  center: { x: number; y: number }
+  segmentation: number[][]
+}
+
+export type AnnotatedScanImage = {
+  url: string
+  width: number
+  height: number
+  annotations: ScanAnnotation2D[]
+}
+
+export type FleetTireItem = {
+  tire_id: string
+  aircraft_id: string
+  tail_number: string
+  position: WheelPosition
+  gear: 'nose' | 'main'
+  brand: string
+  serial: string
+  tire_size: string
+  retread_level: number
+  new_tread_mm: number
+  wear_limit_mm: number
+  time_to_event_cycles: number
+  measured_groove_mm: number | null
+  pressure_pct: number | null
+  model_type: TireModelType
+  scan_status: ScanStatus
+  scan_group: string
+  scan_side: 'left' | 'right'
+  tread_depths: Array<'1-2mm' | '2-3mm' | '3-4mm' | '4-5mm' | '5-6mm'>
+  defects: TireDefect3D[]
+  images: {
+    circle: AnnotatedScanImage
+    flatten: AnnotatedScanImage
+    frames: AnnotatedScanImage[]
+  }
+}
+
+export type FleetAircraftItem = {
+  tail_number: string
+  aircraft_id: string
+  aircraft_type: string
+  home_station: string
+  cycles_per_day: number
+}
+
+export type FleetAircraftListResponse = { aircraft: FleetAircraftItem[] }
+
+export type FleetTiresResponse = {
+  tail_number: string
+  aircraft_id: string
+  aircraft_type: string
+  home_station: string
+  tires: FleetTireItem[]
+}
+
+export function fetchFleetAircraft(): Promise<FleetAircraftListResponse> {
+  return request<FleetAircraftListResponse>('/api/v1/tire_rul/fleet/aircraft')
+}
+
+export function fetchFleetTires(tail: string): Promise<FleetTiresResponse> {
+  const q = new URLSearchParams({ tail })
+  return request<FleetTiresResponse>(`/api/v1/tire_rul/fleet/tires?${q}`)
+}
+
+export function useFleetAircraft(): UseQueryResult<FleetAircraftListResponse, ApiError> {
+  return useQuery({
+    queryKey: ['fleet-aircraft'],
+    queryFn: fetchFleetAircraft,
+    retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
+    staleTime: 60_000,
+  })
+}
+
+export function useFleetTires(tail: string | null): UseQueryResult<FleetTiresResponse, ApiError> {
+  return useQuery({
+    queryKey: ['fleet-tires', tail],
+    queryFn: () => fetchFleetTires(tail as string),
+    enabled: tail !== null,
     retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
     staleTime: 60_000,
   })

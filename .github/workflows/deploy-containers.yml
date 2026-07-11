@@ -76,11 +76,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "Tests temporarily skipped to unblock deployment"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          working-directory: app
+      # --extra ai pulls pandas/pillow so the RUL, CV, and maintenance-agent suites run
+      # (they are collect-ignored without it); rootdir is the repo root via ../pytest.ini.
+      - run: uv sync --extra ai
+        working-directory: app
+      - run: uv run pytest -q ../tests
+        working-directory: app
 
   deploy-app:
     needs: [changes, test-app]
-    if: needs.changes.outputs.app == 'true' && always()
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -94,6 +102,18 @@ jobs:
       - name: Login to ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: astral-sh/setup-uv@v3
+        with:
+          working-directory: app
+
+      # Deterministic (fixed seed). Rewrites tires.parquet scan columns so the
+      # image always ships fleet /tyres data — needs assets/mock-tyres/*/metadata.json.
+      - name: Enrich tire scan packs
+        working-directory: app
+        run: |
+          uv sync --frozen --extra ai
+          PYTHONPATH=.. uv run python -m app.tire_rul.enrich_tire_assets
 
       - name: Build and push image
         env:

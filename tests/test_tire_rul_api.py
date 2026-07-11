@@ -274,3 +274,51 @@ async def test_unexpected_errors_are_sanitized(
         }
     }
     assert "prior artifact path" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_enrich_fleet_scans_runs_job(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pd = pytest.importorskip("pandas")
+
+    def fake_enrich(*, seed: int = 20260712) -> Any:
+        assert seed == 42
+        return pd.DataFrame(
+            {
+                "is_current": [True, True, False],
+                "scan_status": ["healthy", "error", "healthy"],
+                "model_type": ["radial", "type_vii", "radial"],
+                "scan_group": ["1h233b", "8fh20v", "1h233b"],
+            }
+        )
+
+    monkeypatch.setattr("app.api.routes.tire_rul.enrich_tires", fake_enrich)
+    response = await client.post("/api/v1/tire_rul/fleet/enrich-scans?seed=42")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "seed": 42,
+        "current_tires": 2,
+        "status_counts": {"healthy": 1, "error": 1},
+        "model_counts": {"radial": 1, "type_vii": 1},
+        "group_counts": {"1h233b": 1, "8fh20v": 1},
+    }
+
+
+@pytest.mark.asyncio
+async def test_enrich_fleet_scans_rejects_concurrent_run(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.api.routes.tire_rul as tire_rul_routes
+
+    assert tire_rul_routes._ENRICH_LOCK.acquire(blocking=False)
+    try:
+        response = await client.post("/api/v1/tire_rul/fleet/enrich-scans")
+    finally:
+        tire_rul_routes._ENRICH_LOCK.release()
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "ENRICH_IN_PROGRESS"
