@@ -25,7 +25,7 @@ RUN uv sync --frozen --no-dev --extra ai
 # app/ carries the code plus the RUL endpoint's runtime inputs — scoring thresholds
 # (app/tire_rul/config/) and the fitted population prior (app/tire_rul/artifacts/mixedlm_covariance.pkl,
 # 386 B). Training data and heavy research artifacts are excluded via .dockerignore.
-COPY app ./app
+COPY . ./app
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app
