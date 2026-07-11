@@ -255,6 +255,16 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "arn:aws:s3:::${var.project_name}-uploads-*/*",
     ]
   }
+
+  # DynamoDB tables for uploads module (if any exist from previous versions)
+  statement {
+    sid     = "ManageUploadsDynamoDB"
+    effect  = "Allow"
+    actions = ["dynamodb:*"]
+    resources = [
+      "arn:aws:dynamodb:${var.aws_region}:*:table/${var.project_name}-upload-*",
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions_deploy" {
