@@ -3,7 +3,7 @@
 // and stays snake_case here: the payloads are small, flat, and read straight into the SVG marks, so a
 // camelCase conversion layer would only add a place for the two shapes to drift apart.
 
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query'
 
 // Same-origin by default: dev goes through the Vite proxy (see vite.config.ts), prod through the
 // static host's /api reverse-proxy. Point VITE_API_BASE at an absolute origin to bypass both.
@@ -18,10 +18,23 @@ export type InspectionReading = {
   measured_groove_mm: number
 }
 
+export type FlightConditions = {
+  landing_load_factor: number
+  braking_energy_factor: number
+  takeoff_severity_factor: number
+  taxi_heat_factor: number
+  temperature_factor: number
+  inflation_factor: number
+  runway_roughness_factor: number
+  hard_landing_factor: number
+  crosswind_factor: number
+}
+
 export type RulPredictionRequest = {
   position: WheelPosition
   current_cycles: number
   planned_landings?: number
+  flight_conditions?: FlightConditions
   landings_per_day: number
   readings: InspectionReading[]
   as_of_date?: string // ISO YYYY-MM-DD
@@ -49,6 +62,8 @@ export type RulPredictionResponse = {
   wear_to_limit_dates: WearToLimitDates
   p_cross_before_next_check: number
   landings_per_day: number
+  wear_exposure_multiplier: number
+  effective_planned_landings: number
   readings_used: number
   low_confidence: boolean
   status: RulStatus
@@ -90,11 +105,14 @@ export type WheelStatusResponse = {
   rul_p10_landings: number
   earliest_credible_date: string
   p_cross_before_next_check: number
+  priority: number
   pressure_pct: number | null
   pressure_action: string
   station: string
   spares_on_hand: number
   utilization_landings_per_day: number
+  current_cycles: number
+  readings: InspectionReading[]
   low_confidence: boolean
   as_of_date: string
   disclaimer: string
@@ -157,6 +175,17 @@ export function useRulPrediction(req: RulPredictionRequest | null): UseQueryResu
     enabled: req !== null,
     staleTime: 5 * 60_000,
     retry: false,
+  })
+}
+
+export function useRulPredictions(reqs: RulPredictionRequest[]) {
+  return useQueries({
+    queries: reqs.map((req) => ({
+      queryKey: ['rul-predict', req],
+      queryFn: () => predictRul(req),
+      staleTime: 5 * 60_000,
+      retry: false,
+    })),
   })
 }
 

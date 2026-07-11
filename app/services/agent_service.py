@@ -168,6 +168,8 @@ class AgentService:
 
     def wheel_status(self, tail: str, position: str) -> WheelStatusResponse | None:
         from app.tire_rul import scoring
+        from app.tire_rul.app import current_cycles_map
+        from app.tire_rul.constants import PressureLadderAction
 
         ctx = self._context()
         risk = ctx.risk(tail, position)
@@ -175,6 +177,39 @@ class AgentService:
             return None
         report = scoring.tire_status_report(risk, ctx.tc, ctx.as_of)
         estimate = risk.estimate
+        consequence = scoring.consequence_weight(
+            risk.position_code,
+            risk.cycles_per_day,
+            risk.on_hand,
+            ctx.tc.priority,
+            hard_landing_recent=risk.hard_landings_recent > 0,
+            pressure_rule_active=risk.pressure_action
+            in (PressureLadderAction.REMOVE.value, PressureLadderAction.REMOVE_TIRE_AND_MATE.value),
+        )
+        tires = ctx.tables["tires"]
+        mounted = tires[
+            (tires["is_current"])
+            & (tires["aircraft_id"] == risk.aircraft_id)
+            & (tires["position_code"] == risk.position_code)
+        ]
+        tire_id = mounted.iloc[0]["tire_id"]
+        tire_features = ctx.feats[ctx.feats["tire_id"] == tire_id].sort_values(
+            "cycles_since_install"
+        )
+        readings = [
+            {
+                "cycles_since_install": float(row.cycles_since_install),
+                "measured_groove_mm": float(row.measured_groove_mm),
+            }
+            for row in tire_features.itertuples()
+        ]
+        landed_cycles = current_cycles_map(ctx.tables, ctx.as_of)
+        current_cycles = float(
+            landed_cycles.get(
+                tire_id,
+                tire_features["cycles_since_install"].max() if not tire_features.empty else 0.0,
+            )
+        )
         return WheelStatusResponse(
             tail_number=risk.tail_number,
             position=risk.position_code,
@@ -187,11 +222,14 @@ class AgentService:
             rul_p10_landings=round(estimate.rul_p10, 1),
             earliest_credible_date=estimate.date_p10,
             p_cross_before_next_check=round(estimate.p_cross_next_check, 4),
+            priority=round(scoring.priority_score(estimate.p_cross_next_check, consequence), 3),
             pressure_pct=None if risk.pressure_pct is None else round(risk.pressure_pct, 1),
             pressure_action=risk.pressure_action,
             station=risk.station,
             spares_on_hand=risk.on_hand,
             utilization_landings_per_day=round(risk.cycles_per_day, 1),
+            current_cycles=current_cycles,
+            readings=readings,
             low_confidence=estimate.low_confidence,
             as_of_date=ctx.as_of,
             disclaimer=DISCLAIMER,

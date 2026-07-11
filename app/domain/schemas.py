@@ -229,6 +229,24 @@ class InspectionReading(StrictSchema):
     )
 
 
+class FlightConditions(StrictSchema):
+    """Normalized wear factors for newly completed/planned takeoff-and-landing cycles.
+
+    A value of 1.0 is a normal fleet-average cycle; values above 1.0 represent more severe
+    exposure. The service combines these with position-specific sensitivities.
+    """
+
+    landing_load_factor: float = Field(default=1.0, ge=0.5, le=1.5, allow_inf_nan=False)
+    braking_energy_factor: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False)
+    takeoff_severity_factor: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False)
+    taxi_heat_factor: float = Field(default=1.0, ge=0.5, le=1.5, allow_inf_nan=False)
+    temperature_factor: float = Field(default=1.0, ge=0.5, le=1.5, allow_inf_nan=False)
+    inflation_factor: float = Field(default=1.0, ge=1.0, le=1.8, allow_inf_nan=False)
+    runway_roughness_factor: float = Field(default=1.0, ge=1.0, le=1.5, allow_inf_nan=False)
+    hard_landing_factor: float = Field(default=1.0, ge=1.0, le=2.2, allow_inf_nan=False)
+    crosswind_factor: float = Field(default=1.0, ge=1.0, le=1.5, allow_inf_nan=False)
+
+
 class TireRulPredictionRequest(StrictSchema):
     """A single wheel's readings and utilization for one remaining-useful-life forecast."""
 
@@ -270,6 +288,10 @@ class TireRulPredictionRequest(StrictSchema):
             "Additional planned landings to apply as a what-if horizon. The forecast is evaluated "
             "at current_cycles + planned_landings without changing the inspection history."
         ),
+    )
+    flight_conditions: FlightConditions = Field(
+        default_factory=FlightConditions,
+        description="Wear factors applied only to planned_landings; defaults to normal exposure.",
     )
     landings_per_day: float = Field(
         gt=0.0,
@@ -329,6 +351,12 @@ class TireRulPredictionResponse(StrictSchema):
         description="Probability the wear limit is crossed before the next scheduled check."
     )
     landings_per_day: float
+    wear_exposure_multiplier: float = Field(
+        description="Position-specific multiplier applied to the newly planned landings."
+    )
+    effective_planned_landings: float = Field(
+        description="Planned landings converted to fleet-average wear-equivalent landings."
+    )
     readings_used: int = Field(description="Number of readings the posterior was fit on.")
     low_confidence: bool = Field(
         description="True when too few readings were supplied and the fleet prior dominates."
@@ -462,11 +490,20 @@ class WheelStatusResponse(StrictSchema):
     rul_p10_landings: float
     earliest_credible_date: date
     p_cross_before_next_check: float
+    priority: float = Field(
+        description="Position-aware maintenance priority: crossing probability x consequence."
+    )
     pressure_pct: float | None
     pressure_action: str
     station: str
     spares_on_hand: int
     utilization_landings_per_day: float
+    current_cycles: float = Field(
+        description="Total landed cycles for the mounted tire at the current fleet snapshot."
+    )
+    readings: list[InspectionReading] = Field(
+        description="Inspection history for the mounted tire, ready to reuse in a RUL prediction."
+    )
     low_confidence: bool
     as_of_date: date
     disclaimer: str

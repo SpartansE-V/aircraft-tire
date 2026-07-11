@@ -109,6 +109,31 @@ async def test_planned_landings_updates_forecast_horizon(
 
 
 @pytest.mark.asyncio
+async def test_severe_flight_conditions_reduce_rul_and_report_exposure(
+    client: AsyncClient, rul_payload: dict[str, Any]
+) -> None:
+    rul_payload["planned_landings"] = 10
+    normal = (await client.post("/api/v1/tire_rul/predict", json=rul_payload)).json()
+    rul_payload["flight_conditions"] = {
+        "landing_load_factor": 1.3,
+        "braking_energy_factor": 1.5,
+        "takeoff_severity_factor": 1.2,
+        "taxi_heat_factor": 1.2,
+        "temperature_factor": 1.1,
+        "inflation_factor": 1.3,
+        "runway_roughness_factor": 1.2,
+        "hard_landing_factor": 1.5,
+        "crosswind_factor": 1.2,
+    }
+    severe = (await client.post("/api/v1/tire_rul/predict", json=rul_payload)).json()
+
+    assert normal["wear_exposure_multiplier"] == 1.0
+    assert severe["wear_exposure_multiplier"] > 1.0
+    assert severe["effective_planned_landings"] > normal["effective_planned_landings"]
+    assert severe["rul_landings"]["median"] < normal["rul_landings"]["median"]
+
+
+@pytest.mark.asyncio
 async def test_worn_tire_reports_replace_now(
     client: AsyncClient, rul_payload: dict[str, Any]
 ) -> None:
