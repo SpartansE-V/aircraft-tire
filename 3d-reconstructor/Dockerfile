@@ -26,7 +26,7 @@ RUN apt-get update && \
 # CPU-only torch (small) BEFORE the repo requirements so their unpinned `torch`
 # stays satisfied by this CPU build. The extra-index keeps torch CPU if touched.
 RUN pip install --upgrade pip && \
-    pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+    pip install torch==2.4.1 torchvision==0.19.1 --index-url https://download.pytorch.org/whl/cpu
 
 # Clone MASt3R with DUSt3R + CroCo submodules and install their deps.
 # CroCo's optional CUDA RoPE kernels are NOT compiled — pure-pytorch RoPE fallback.
