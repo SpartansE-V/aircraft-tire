@@ -6,7 +6,7 @@ the public API or generated documentation.
 
 from dataclasses import dataclass
 
-from app.domain.schemas import AttentionLevel, SeverityLevel
+from app.domain.schemas import AttentionLevel, GearValue, SeverityLevel
 
 MODEL_VERSION = "pilot-1.0.0"
 DISCLAIMER = (
@@ -45,6 +45,31 @@ PRESSURE_WARNING_THRESHOLD_PCT = 5.0
 WEAR_RATE_OUTPUT_DECIMALS = 3
 PRESSURE_MULTIPLIER_OUTPUT_DECIMALS = 3
 
+SIMULATION_MODEL_VERSION = "pilot-sim-2.0.0"
+SIMULATION_DISCLAIMER = (
+    "This simulation is an uncalibrated demonstration estimate. It does not provide certified "
+    "limits, determine serviceability, authorize dispatch, or replace approved maintenance data "
+    "and qualified physical inspection."
+)
+SIMULATION_PROFILE_DISCLAIMER = (
+    "Demonstration profile only; it is not an approved aircraft or tire configuration."
+)
+SIMULATION_UNCERTAINTY_SIGMA = 0.15
+SIMULATION_SINK_RATE_REFERENCE_MS = 1.0
+SIMULATION_SINK_RATE_FACTOR = 0.10
+SIMULATION_YAW_FACTOR = 0.012
+SIMULATION_TAXI_SPEED_REFERENCE_KT = 15.0
+SIMULATION_TAXI_SPEED_FACTOR = 0.008
+SIMULATION_BRAKE_TEMPERATURE_REFERENCE_C = 200.0
+SIMULATION_BRAKE_TEMPERATURE_FACTOR = 0.0004
+SIMULATION_HEAVY_BRAKING_FACTOR = 1.12
+SIMULATION_RUNWAY_FACTORS = {
+    "DRY": 1.0,
+    "WET": 1.03,
+    "CONTAMINATED": 1.08,
+    "ROUGH": 1.12,
+}
+
 PRESSURE_WARNING_MESSAGE = (
     "Under-inflation is a significant wear driver. Verify cold tire pressure using the "
     "approved maintenance procedure."
@@ -62,6 +87,15 @@ class SeverityConfiguration:
     label: str
     attention: AttentionLevel
     message: str
+
+
+@dataclass(frozen=True)
+class SimulationProfileConfiguration:
+    profile_id: str
+    display_name: str
+    gear: GearValue
+    initial_tread_depth_mm: float
+    planning_threshold_mm: float
 
 
 GEAR_CONFIGURATIONS = {
@@ -101,5 +135,22 @@ SEVERITY_CONFIGURATIONS: dict[SeverityLevel, SeverityConfiguration] = {
             "The scenario indicates severe tire-wear conditions. A qualified maintenance "
             "inspection should be prioritized."
         ),
+    ),
+}
+
+SIMULATION_PROFILES = {
+    "pilot-main-v1": SimulationProfileConfiguration(
+        profile_id="pilot-main-v1",
+        display_name="Pilot main-gear demonstration profile",
+        gear="main",
+        initial_tread_depth_mm=INITIAL_TREAD_DEPTH_MM,
+        planning_threshold_mm=MINIMUM_TREAD_DEPTH_MM,
+    ),
+    "pilot-nose-v1": SimulationProfileConfiguration(
+        profile_id="pilot-nose-v1",
+        display_name="Pilot nose-gear demonstration profile",
+        gear="nose",
+        initial_tread_depth_mm=INITIAL_TREAD_DEPTH_MM,
+        planning_threshold_mm=MINIMUM_TREAD_DEPTH_MM,
     ),
 }
