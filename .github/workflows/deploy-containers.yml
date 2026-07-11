@@ -6,6 +6,7 @@ on:
     paths:
       - "craft-detector-service/**"
       - "3d-reconstructor/**"
+      - "web/**"
   workflow_dispatch: {}
 
 # Shares a concurrency group with infra.yml - both run `terraform apply`
@@ -54,6 +55,7 @@ jobs:
     outputs:
       app: ${{ steps.filter.outputs.app }}
       reconstructor: ${{ steps.filter.outputs.reconstructor }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -64,6 +66,8 @@ jobs:
               - 'craft-detector-service/**'
             reconstructor:
               - '3d-reconstructor/**'
+            web:
+              - 'web/**'
 
   test-app:
     needs: changes
@@ -170,3 +174,60 @@ jobs:
           terraform apply -auto-approve \
             -target='module.ecs["reconstructor"]' \
             -var="image_tag_reconstructor=${{ github.sha }}"
+
+  test-web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  deploy-web:
+    needs: [changes, test-web]
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          docker build -t "$REGISTRY/aircraft-tire-web:${{ github.sha }}" web
+          docker push "$REGISTRY/aircraft-tire-web:${{ github.sha }}"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Deploy web service
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -target='module.ecs["web"]' \
+            -var="image_tag_web=${{ github.sha }}"
