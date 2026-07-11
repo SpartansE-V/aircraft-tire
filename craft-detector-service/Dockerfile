@@ -7,6 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
+ARG OPENAI_API_KEY
+# The OpenAI API key is provided by CI at build/deploy time and is not baked into the image.
+
 WORKDIR /app
 
 # opencv-python (pulled in by inference-sdk) needs libGL/glib at import time,
