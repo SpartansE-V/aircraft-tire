@@ -34,17 +34,18 @@ locals {
       alb_name       = "${var.project_name}-recon"
       container_port = 8000
       # COLMAP reconstruction is CPU/memory heavy compared to the API service.
-      # Runs on EC2 (not Fargate - no GPU support) via the gpu_capacity ASG,
-      # always one instance, so autoscaling the service itself is pointless.
+      # CPU-only on Fargate: use_gpu defaults false in the app, and the
+      # account's GPU (G/VT) vCPU quota is 0 - EC2 GPU capacity is blocked
+      # on a quota increase, reverted back to Fargate for now.
       task_cpu           = 2048
       task_memory        = 8192
       desired_count      = 1
       image_tag          = var.image_tag_reconstructor
       environment        = [] # Dockerfile ENV defaults cover COLMAP_* config.
       health_check_path  = "/api/v1/health" # health router is mounted under api_prefix
-      launch_type        = "EC2"
-      gpu_count          = 1
-      enable_autoscaling = false
+      launch_type        = "FARGATE"
+      gpu_count          = 0
+      enable_autoscaling = true
     }
     web = {
       name               = "${var.project_name}-web"
@@ -103,20 +104,6 @@ module "alb" {
   tags              = local.tags
 }
 
-module "gpu_capacity" {
-  source = "./modules/gpu_capacity"
-
-  project_name     = "${var.project_name}-3d-reconstructor"
-  cluster_name     = aws_ecs_cluster.main.name
-  vpc_id           = module.network.vpc_id
-  subnet_ids       = module.network.private_subnet_ids
-  instance_type    = "g4dn.2xlarge"
-  min_size         = 1
-  max_size         = 1
-  desired_capacity = 1
-  tags             = local.tags
-}
-
 module "ecs" {
   for_each = local.services
   source   = "./modules/ecs"
@@ -139,10 +126,10 @@ module "ecs" {
   launch_type            = each.value.launch_type
   gpu_count              = each.value.gpu_count
   enable_autoscaling     = each.value.enable_autoscaling
-  capacity_provider_name = each.value.launch_type == "EC2" ? module.gpu_capacity.capacity_provider_name : null
+  capacity_provider_name = null
   tags                   = local.tags
 
-  depends_on = [module.alb, module.gpu_capacity]
+  depends_on = [module.alb]
 }
 
 module "uploads" {
