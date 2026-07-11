@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* Two surfaces: the hangar-dark default, and a light mode for bright environments.
+   Structural colour lives in these tokens. The semantic hues (HUE in charts.tsx) stay shared
+   for SVG marks — they clear 3:1 on both surfaces — but small *text* needs a darker variant
+   on white, hence the --primary/--warn/--crit/--ok pair below. */
+:root {
+  color-scheme: dark;
+  --bg: #070b0f;
+  --grid: rgba(4, 162, 194, 0.045);
+  --panel: #0a1015;
+  --line: #16222c;
+  --line-2: #1e2a35;
+  --track: #18222c;
+  --axis: #2a3541;
+  --ink: #e8eef3;
+  --ink-2: #d5dee6;
+  --ink-3: #8b9aa8;
+  --ink-4: #5f6f7d;
+  --primary: #04a2c2;
+  --warn: #c28409;
+  --crit: #e0483d;
+  --ok: #12a37f;
+  /* pre-mixed alphas: Tailwind's /opacity modifier can't reliably tint a var() colour */
+  --primary-soft: rgba(4, 162, 194, 0.15);
+  --primary-dim: rgba(4, 162, 194, 0.4);
+  --warn-line: rgba(194, 132, 9, 0.25);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #eef2f6;
+  --grid: rgba(11, 74, 90, 0.05);
+  --panel: #ffffff;
+  --line: #d5dee5;
+  --line-2: #c3d0d9;
+  --track: #e3e9ee;
+  --axis: #ccd7de;
+  --ink: #0c1a22;
+  --ink-2: #2f4049;
+  --ink-3: #5c6f7c;
+  --ink-4: #7f929f;
+  --primary: #036e85;
+  --warn: #8a5d06;
+  --crit: #b93728;
+  --ok: #0b7358;
+  --primary-soft: rgba(3, 110, 133, 0.12);
+  --primary-dim: rgba(3, 110, 133, 0.35);
+  --warn-line: rgba(138, 93, 6, 0.3);
+}
+
+body {
+  background: var(--bg);
+  /* faint engineering grid — the only decoration on the page */
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* CRT sweep over the 3D viewport */
+.scanline {
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(4, 162, 194, 0.05) 0px,
+    rgba(4, 162, 194, 0.05) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  mix-blend-mode: screen;
+}
+
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  height: 22%;
+  background: linear-gradient(to bottom, transparent, rgba(4, 162, 194, 0.09), transparent);
+  animation: sweep 6s linear infinite;
+}
+
+/* The scanline is a dark-surface affectation: mix-blend-mode:screen is a no-op on white and
+   the sweep only muddies it. Drop it in light mode rather than restyle it. */
+[data-theme="light"] .scanline {
+  display: none;
+}
+
+@keyframes sweep {
+  from { transform: translateY(-40%); }
+  to { transform: translateY(440%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanline::after { animation: none; opacity: 0; }
+}
