@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from app.rul.features import (
+from app.tire_rul.features import (
     FEATURE_COLUMNS,
     assign_folds,
     build_features,

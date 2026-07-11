@@ -5,16 +5,16 @@ import { harnessFE } from '@harness-fe/vite'
 
 // https://vite.dev/config/
 // ponytail: harnessFE is dev-only agent tooling — keep it out of the prod bundle.
+// The dev server proxies /api to the FastAPI backend so the app calls same-origin relative paths
+// (no CORS, no absolute URL baked into the bundle). Override the target with VITE_API_PROXY when the
+// backend runs elsewhere; in prod the static host reverse-proxies /api the same way.
+const API_PROXY = process.env.VITE_API_PROXY ?? 'http://localhost:8000'
+
 export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss(), ...(command === 'serve' ? [harnessFE()] : [])],
-  // Same-origin `/api` in dev so the browser never hits CORS: forward it to the FastAPI
-  // backend (`make run`, default :8000). Point elsewhere with VITE_API_PROXY.
   server: {
     proxy: {
-      '/api': {
-        target: process.env.VITE_API_PROXY ?? 'http://localhost:8000',
-        changeOrigin: true,
-      },
+      '/api': { target: API_PROXY, changeOrigin: true },
     },
   },
 }))

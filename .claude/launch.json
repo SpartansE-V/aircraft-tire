@@ -3,8 +3,10 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd web && npm run dev"],
+      "cwd": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "env": { "VITE_API_PROXY": "http://localhost:8000" },
       "port": 5173
     }
   ]

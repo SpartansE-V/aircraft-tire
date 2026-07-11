@@ -6,16 +6,16 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import FileResponse
 
 from ..schemas import ReconstructionRequest
-from ..services.colmap import ColmapService
+from ..services.mast3r_reconstructor import Mast3rService
 
 router = APIRouter(prefix="/reconstructions", tags=["reconstructions"])
 
 
-def _get_service(request: Request) -> ColmapService:
-    return request.app.state.colmap_service
+def _get_service(request: Request) -> Mast3rService:
+    return request.app.state.reconstruction_service
 
 
-def _job_run_dir(service: ColmapService, job_id: str) -> Path:
+def _job_run_dir(service: Mast3rService, job_id: str) -> Path:
     record = service.store.get_job(job_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
@@ -43,27 +43,34 @@ def get_reconstruction(job_id: str, request: Request) -> dict[str, object]:
     return payload
 
 
-@router.get("/{job_id}/pointcloud")
-def get_reconstruction_pointcloud(job_id: str, request: Request) -> FileResponse:
+@router.get("/{job_id}/model.glb")
+def get_reconstruction_glb(job_id: str, request: Request) -> FileResponse:
     service = _get_service(request)
     record = service.store.get_job(job_id)
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
-
-    try:
-        ply_path = service.export_pointcloud(record.paths)
-    except Exception as exc:  # noqa: BLE001 - surface conversion failures to the client
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to export point cloud: {exc}",
-        ) from exc
-    if ply_path is None:
+    model_glb = Path(record.paths.model_glb)
+    if not model_glb.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No point cloud available; the reconstruction produced no sparse model.",
+            detail="No GLB available; the reconstruction may not have completed.",
         )
+    return FileResponse(model_glb, filename=f"reconstruction-{job_id}.glb", media_type="model/gltf-binary")
 
-    return FileResponse(ply_path, filename=f"reconstruction-{job_id}.ply", media_type="application/octet-stream")
+
+@router.get("/{job_id}/pointmaps")
+def get_reconstruction_pointmaps(job_id: str, request: Request) -> FileResponse:
+    service = _get_service(request)
+    record = service.store.get_job(job_id)
+    if record is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+    pointmaps = Path(record.paths.pointmaps)
+    if not pointmaps.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No point maps available; the reconstruction may not have completed.",
+        )
+    return FileResponse(pointmaps, filename=f"pointmaps-{job_id}.npz", media_type="application/octet-stream")
 
 
 @router.get("/{job_id}/files")
@@ -111,4 +118,3 @@ def create_reconstruction(
 
     background_tasks.add_task(service.run_job, job["job_id"])
     return job
-

@@ -158,12 +158,65 @@ data "aws_iam_policy_document" "github_actions_deploy" {
       "elasticloadbalancing:*",
       "ecs:*",
       "ecr:*",
+      "apigateway:*",
+      "lambda:*",
       "logs:*",
       "application-autoscaling:*",
       "iam:GetRole", "iam:GetRolePolicy", "iam:GetOpenIDConnectProvider",
       "iam:ListRolePolicies", "iam:ListAttachedRolePolicies",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManageUploadPresignerRole"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:UpdateRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+    ]
+    resources = ["arn:aws:iam::*:role/${var.project_name}-upload-presigner-lambda-role"]
+  }
+
+  statement {
+    sid       = "PassUploadPresignerRole"
+    effect    = "Allow"
+    actions   = ["iam:PassRole"]
+    resources = ["arn:aws:iam::*:role/${var.project_name}-upload-presigner-lambda-role"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["lambda.amazonaws.com"]
+    }
+  }
+
+  statement {
+    sid    = "ManageUploadImagesTable"
+    effect = "Allow"
+    actions = [
+      "dynamodb:CreateTable",
+      "dynamodb:DeleteTable",
+      "dynamodb:DescribeContinuousBackups",
+      "dynamodb:DescribeTable",
+      "dynamodb:ListTagsOfResource",
+      "dynamodb:TagResource",
+      "dynamodb:UntagResource",
+      "dynamodb:UpdateContinuousBackups",
+      "dynamodb:UpdateTable",
+    ]
+    resources = [
+      "arn:aws:dynamodb:${var.aws_region}:*:table/${var.project_name}-upload-images",
+      "arn:aws:dynamodb:${var.aws_region}:*:table/${var.project_name}-upload-images/index/*",
+    ]
   }
 
   # ECS task execution/task roles (one pair per service, e.g. aircraft-tire
@@ -200,6 +253,16 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     resources = [
       "arn:aws:s3:::${var.project_name}-uploads-*",
       "arn:aws:s3:::${var.project_name}-uploads-*/*",
+    ]
+  }
+
+  # DynamoDB tables for uploads module (if any exist from previous versions)
+  statement {
+    sid     = "ManageUploadsDynamoDB"
+    effect  = "Allow"
+    actions = ["dynamodb:*"]
+    resources = [
+      "arn:aws:dynamodb:${var.aws_region}:*:table/${var.project_name}-upload-*",
     ]
   }
 }

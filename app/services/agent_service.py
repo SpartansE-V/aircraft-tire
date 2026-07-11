@@ -1,13 +1,13 @@
-"""Maintenance Decision Agent service — bridges the FastAPI layer into app.rul.agent.
+"""Maintenance Decision Agent service — bridges the FastAPI layer into app.tire_rul.agent.
 
 Owns the fleet snapshot (`ToolContext`): parquet tables + fitted prior + per-inspection
 features + per-wheel risk estimates, cached per as-of date. The agent itself (LLM
-tool-calling loop, or the offline deterministic planner) lives in app.rul.agent and is
+tool-calling loop, or the offline deterministic planner) lives in app.tire_rul.agent and is
 reused untouched; this module only translates between the public API contract and it.
 
 The fleet dataset and pandas belong to the `ai` extra — on a base install (or when the
 data/artifacts folders are absent) every entry point raises AgentDataUnavailableError,
-which the route layer maps to 503 so /api/v1/rul/predict keeps working stand-alone.
+which the route layer maps to 503 so /api/v1/tire_rul/predict keeps working stand-alone.
 """
 
 from __future__ import annotations
@@ -28,10 +28,10 @@ from app.domain.schemas import (
     PriorityWheel,
     WheelStatusResponse,
 )
-from app.services.rul_service import DISCLAIMER
+from app.services.tire_rul_service import DISCLAIMER
 
 if TYPE_CHECKING:
-    from app.rul.agent.tools import ToolContext
+    from app.tire_rul.agent.tools import ToolContext
 
 
 logger = logging.getLogger(__name__)
@@ -51,16 +51,16 @@ def _load_context(as_of: date) -> ToolContext:
     try:
         import pandas as pd
 
-        from app.rul.app import assemble_wheels
-        from app.rul.features import build_features
+        from app.tire_rul.app import assemble_wheels
+        from app.tire_rul.features import build_features
     except ImportError as exc:
         raise AgentDataUnavailableError(
             "The maintenance agent needs the AI stack (`uv sync --extra ai`)."
         ) from exc
 
-    from app.rul import paths
-    from app.rul.agent.tools import ToolContext
-    from app.rul.config import get_threshold_config
+    from app.tire_rul import paths
+    from app.tire_rul.agent.tools import ToolContext
+    from app.tire_rul.config import get_threshold_config
 
     missing = [p.name for p in (*paths.CORE_TABLES, paths.MIXEDLM_COV) if not p.exists()]
     if missing:
@@ -98,7 +98,7 @@ class AgentService:
         return _cached_context(datetime.now(UTC).date())
 
     def chat(self, request: AgentChatRequest) -> AgentChatResponse:
-        from app.rul.agent import MaintenanceAgent
+        from app.tire_rul.agent import MaintenanceAgent
 
         ctx = self._context()
         history = [m.model_dump() for m in request.messages]
@@ -137,7 +137,7 @@ class AgentService:
         )
 
     def fleet_worklist(self, top_n: int, station: str | None) -> FleetWorklistResponse:
-        from app.rul import scoring
+        from app.tire_rul import scoring
 
         ctx = self._context()
         by_wheel = {(r.tail_number, r.position_code): r for r in ctx.risks}
@@ -167,7 +167,9 @@ class AgentService:
         return FleetWorklistResponse(as_of_date=ctx.as_of, wheels=wheels, disclaimer=DISCLAIMER)
 
     def wheel_status(self, tail: str, position: str) -> WheelStatusResponse | None:
-        from app.rul import scoring
+        from app.tire_rul import scoring
+        from app.tire_rul.app import current_cycles_map
+        from app.tire_rul.constants import PressureLadderAction
 
         ctx = self._context()
         risk = ctx.risk(tail, position)
@@ -175,6 +177,39 @@ class AgentService:
             return None
         report = scoring.tire_status_report(risk, ctx.tc, ctx.as_of)
         estimate = risk.estimate
+        consequence = scoring.consequence_weight(
+            risk.position_code,
+            risk.cycles_per_day,
+            risk.on_hand,
+            ctx.tc.priority,
+            hard_landing_recent=risk.hard_landings_recent > 0,
+            pressure_rule_active=risk.pressure_action
+            in (PressureLadderAction.REMOVE.value, PressureLadderAction.REMOVE_TIRE_AND_MATE.value),
+        )
+        tires = ctx.tables["tires"]
+        mounted = tires[
+            (tires["is_current"])
+            & (tires["aircraft_id"] == risk.aircraft_id)
+            & (tires["position_code"] == risk.position_code)
+        ]
+        tire_id = mounted.iloc[0]["tire_id"]
+        tire_features = ctx.feats[ctx.feats["tire_id"] == tire_id].sort_values(
+            "cycles_since_install"
+        )
+        readings = [
+            {
+                "cycles_since_install": float(row.cycles_since_install),
+                "measured_groove_mm": float(row.measured_groove_mm),
+            }
+            for row in tire_features.itertuples()
+        ]
+        landed_cycles = current_cycles_map(ctx.tables, ctx.as_of)
+        current_cycles = float(
+            landed_cycles.get(
+                tire_id,
+                tire_features["cycles_since_install"].max() if not tire_features.empty else 0.0,
+            )
+        )
         return WheelStatusResponse(
             tail_number=risk.tail_number,
             position=risk.position_code,
@@ -187,11 +222,14 @@ class AgentService:
             rul_p10_landings=round(estimate.rul_p10, 1),
             earliest_credible_date=estimate.date_p10,
             p_cross_before_next_check=round(estimate.p_cross_next_check, 4),
+            priority=round(scoring.priority_score(estimate.p_cross_next_check, consequence), 3),
             pressure_pct=None if risk.pressure_pct is None else round(risk.pressure_pct, 1),
             pressure_action=risk.pressure_action,
             station=risk.station,
             spares_on_hand=risk.on_hand,
             utilization_landings_per_day=round(risk.cycles_per_day, 1),
+            current_cycles=current_cycles,
+            readings=readings,
             low_confidence=estimate.low_confidence,
             as_of_date=ctx.as_of,
             disclaimer=DISCLAIMER,

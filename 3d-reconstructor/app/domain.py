@@ -16,22 +16,27 @@ class JobStatus(str, Enum):
 class ReconstructionOptions:
     project_id: str
     image_dir: str
-    camera_model: str
-    matcher: str
-    dense: bool
-    use_gpu: bool
-    image_list_path: str | None = None
-    max_image_size: int | None = None
+    image_size: int = 512
+    min_conf_thr: float = 1.5
+    optim_level: str = "refine+depth"
+    lr1: float = 0.07
+    niter1: int = 300
+    lr2: float = 0.01
+    niter2: int = 300
+    matching_conf_thr: float = 0.0
+    scene_graph: str = "complete"
+    shared_intrinsics: bool = False
+    # Override device ("cuda" | "cpu"); None uses the service default ("auto").
+    device: str | None = None
 
 
 @dataclass(slots=True)
 class PipelinePaths:
     run_dir: str
-    database_path: str
-    sparse_dir: str
-    dense_dir: str | None
     image_dir: str
-    image_list_path: str | None = None
+    model_glb: str
+    pointmaps: str
+    cache_dir: str
 
 
 @dataclass(slots=True)

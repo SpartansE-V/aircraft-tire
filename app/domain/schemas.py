@@ -192,8 +192,8 @@ class HealthResponse(StrictSchema):
 
 
 # ---------------------------------------------------------------------------
-# RUL prediction (the AI endpoint) — contract for app.services.rul_service,
-# which is the only place the backend crosses into the app.rul model package.
+# RUL prediction (the AI endpoint) — contract for app.services.tire_rul_service,
+# which is the only place the backend crosses into the app.tire_rul model package.
 # ---------------------------------------------------------------------------
 WheelPositionValue = Literal[
     "nlg_l",
@@ -203,8 +203,8 @@ WheelPositionValue = Literal[
     "mlg_r_inbd",
     "mlg_r_outbd",
 ]
-RulStatusValue = Literal["healthy", "monitor", "schedule", "replace_now"]
-RulSeverityValue = Literal["info", "warning", "critical"]
+TireRulStatusValue = Literal["healthy", "monitor", "schedule", "replace_now"]
+TireRulSeverityValue = Literal["info", "warning", "critical"]
 
 MAX_READINGS = 200
 MAX_GROOVE_MM = 30.0
@@ -229,7 +229,25 @@ class InspectionReading(StrictSchema):
     )
 
 
-class RulPredictionRequest(StrictSchema):
+class FlightConditions(StrictSchema):
+    """Normalized wear factors for newly completed/planned takeoff-and-landing cycles.
+
+    A value of 1.0 is a normal fleet-average cycle; values above 1.0 represent more severe
+    exposure. The service combines these with position-specific sensitivities.
+    """
+
+    landing_load_factor: float = Field(default=1.0, ge=0.5, le=1.5, allow_inf_nan=False)
+    braking_energy_factor: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False)
+    takeoff_severity_factor: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False)
+    taxi_heat_factor: float = Field(default=1.0, ge=0.5, le=1.5, allow_inf_nan=False)
+    temperature_factor: float = Field(default=1.0, ge=0.5, le=1.5, allow_inf_nan=False)
+    inflation_factor: float = Field(default=1.0, ge=1.0, le=1.8, allow_inf_nan=False)
+    runway_roughness_factor: float = Field(default=1.0, ge=1.0, le=1.5, allow_inf_nan=False)
+    hard_landing_factor: float = Field(default=1.0, ge=1.0, le=2.2, allow_inf_nan=False)
+    crosswind_factor: float = Field(default=1.0, ge=1.0, le=1.5, allow_inf_nan=False)
+
+
+class TireRulPredictionRequest(StrictSchema):
     """A single wheel's readings and utilization for one remaining-useful-life forecast."""
 
     model_config = ConfigDict(
@@ -240,6 +258,7 @@ class RulPredictionRequest(StrictSchema):
                 {
                     "position": "mlg_r_inbd",
                     "current_cycles": 190,
+                    "planned_landings": 20,
                     "landings_per_day": 4.0,
                     "readings": [
                         {"cycles_since_install": 0, "measured_groove_mm": 12.0},
@@ -259,6 +278,20 @@ class RulPredictionRequest(StrictSchema):
         le=MAX_CURRENT_CYCLES,
         allow_inf_nan=False,
         description="Landings the tire has flown so far (the point RUL is measured from).",
+    )
+    planned_landings: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=MAX_CURRENT_CYCLES,
+        allow_inf_nan=False,
+        description=(
+            "Additional planned landings to apply as a what-if horizon. The forecast is evaluated "
+            "at current_cycles + planned_landings without changing the inspection history."
+        ),
+    )
+    flight_conditions: FlightConditions = Field(
+        default_factory=FlightConditions,
+        description="Wear factors applied only to planned_landings; defaults to normal exposure.",
     )
     landings_per_day: float = Field(
         gt=0.0,
@@ -285,7 +318,7 @@ class RulPredictionRequest(StrictSchema):
     )
 
 
-class RulQuantiles(StrictSchema):
+class TireRulQuantiles(StrictSchema):
     p10: float = Field(description="Earliest-credible remaining landings (10th percentile).")
     median: float = Field(description="Expected remaining landings (50th percentile).")
     p90: float = Field(description="Latest-credible remaining landings (90th percentile).")
@@ -300,27 +333,35 @@ class WearToLimitDates(StrictSchema):
     p90: date = Field(description="Date the P90 (latest-credible) RUL is reached.")
 
 
-class RulStatus(StrictSchema):
-    status: RulStatusValue = Field(description="Overall wheel condition category.")
-    severity: RulSeverityValue = Field(description="Severity of the recommended attention level.")
+class TireRulStatus(StrictSchema):
+    status: TireRulStatusValue = Field(description="Overall wheel condition category.")
+    severity: TireRulSeverityValue = Field(
+        description="Severity of the recommended attention level."
+    )
     headline: str = Field(description="One-line plain-language condition summary.")
     recommended_action: str = Field(description="Suggested maintenance-planning action.")
 
 
-class RulPredictionResponse(StrictSchema):
+class TireRulPredictionResponse(StrictSchema):
     prediction_id: UUID = Field(description="Stateless UUID for correlating this prediction.")
     position: WheelPositionValue
-    rul_landings: RulQuantiles
+    rul_landings: TireRulQuantiles
     wear_to_limit_dates: WearToLimitDates
     p_cross_before_next_check: float = Field(
         description="Probability the wear limit is crossed before the next scheduled check."
     )
     landings_per_day: float
+    wear_exposure_multiplier: float = Field(
+        description="Position-specific multiplier applied to the newly planned landings."
+    )
+    effective_planned_landings: float = Field(
+        description="Planned landings converted to fleet-average wear-equivalent landings."
+    )
     readings_used: int = Field(description="Number of readings the posterior was fit on.")
     low_confidence: bool = Field(
         description="True when too few readings were supplied and the fleet prior dominates."
     )
-    status: RulStatus
+    status: TireRulStatus
     wear_limit_mm: float = Field(
         description="Serviceable groove-depth limit used for the crossing."
     )
@@ -330,7 +371,7 @@ class RulPredictionResponse(StrictSchema):
 
 # ---------------------------------------------------------------------------
 # Maintenance Decision Agent — contract for app.services.agent_service, which
-# wraps app.rul.agent (LLM tool-calling over the fleet dataset) for the FE.
+# wraps app.tire_rul.agent (LLM tool-calling over the fleet dataset) for the FE.
 # ---------------------------------------------------------------------------
 AgentBackendValue = Literal["auto", "openai", "bedrock", "mock"]
 AgentRoleValue = Literal["user", "assistant"]
@@ -440,8 +481,8 @@ class WheelStatusResponse(StrictSchema):
 
     tail_number: str
     position: WheelPositionValue
-    status: RulStatusValue
-    severity: RulSeverityValue
+    status: TireRulStatusValue
+    severity: TireRulSeverityValue
     headline: str
     explanation: str
     recommended_action: str
@@ -449,11 +490,20 @@ class WheelStatusResponse(StrictSchema):
     rul_p10_landings: float
     earliest_credible_date: date
     p_cross_before_next_check: float
+    priority: float = Field(
+        description="Position-aware maintenance priority: crossing probability x consequence."
+    )
     pressure_pct: float | None
     pressure_action: str
     station: str
     spares_on_hand: int
     utilization_landings_per_day: float
+    current_cycles: float = Field(
+        description="Total landed cycles for the mounted tire at the current fleet snapshot."
+    )
+    readings: list[InspectionReading] = Field(
+        description="Inspection history for the mounted tire, ready to reuse in a RUL prediction."
+    )
     low_confidence: bool
     as_of_date: date
     disclaimer: str
