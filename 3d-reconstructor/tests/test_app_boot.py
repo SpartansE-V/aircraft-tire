@@ -7,7 +7,7 @@ class AppBootTests(unittest.TestCase):
     def test_app_imports(self) -> None:
         from app.main import app
 
-        self.assertEqual(app.title, "COLMAP Reconstruction API")
+        self.assertEqual(app.title, "MASt3R Reconstruction API")
 
 
 if __name__ == "__main__":

@@ -25,12 +25,21 @@ class UploadServiceTests(unittest.TestCase):
         self.settings = Settings(
             app_name="test",
             api_prefix="/api/v1",
-            colmap_binary="colmap",
             workspace_root=self.workspace_root,
             images_root=self.images_root,
             outputs_root=self.outputs_root,
-            default_camera_model="SIMPLE_RADIAL",
-            default_matcher="exhaustive",
+            mast3r_model_name="naver/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric",
+            mast3r_device="cpu",
+            image_size=512,
+            min_conf_thr=1.5,
+            optim_level="refine+depth",
+            lr1=0.07,
+            niter1=300,
+            lr2=0.01,
+            niter2=300,
+            matching_conf_thr=0.0,
+            scene_graph="complete",
+            shared_intrinsics=False,
         )
         self.service = UploadService(self.settings)
 
