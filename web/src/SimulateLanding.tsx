@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import Aircraft from './Aircraft'
 import { Gauge, HUE, RowBars, Sparkline } from './charts'
 import { FLEET_TIRES } from './data'
-import { brakeCurve, CAL, type Landing, type Surface } from './sim'
-import { simulateLandingRun, type Attitude } from './landingEngine'
+import { beadCurve, CAL, contactPatchDeg, OLEO, type Landing, type Surface } from './sim'
+import { LEAD_AXLE, simulateLandingRun, type Attitude } from './landingEngine'
 import { TireDetail } from './TireCards'
+import TireViewer, { type Impact } from './TireViewer'
 import { TRACKS, type Track } from './tracks'
 import TrackMap from './TrackMap'
 import { Card, Field, Header, Kpi, Mini, Open, STATUS, useTheme } from './ui'
@@ -20,7 +21,7 @@ const HOME = TRACKS.find((t) => t.icao === 'VVTS')!
 /** A landing is the aircraft's numbers plus the runway it is arriving on. */
 function landingAt(track: Track, base?: Partial<Landing>): Landing {
   return {
-    weightT: 62,
+    weightT: 200,
     sinkFpm: 240,
     gsKt: 138,
     brakeShare: 0.55,
@@ -34,7 +35,10 @@ function landingAt(track: Track, base?: Partial<Landing>): Landing {
   }
 }
 
-const LEVEL: Attitude = { pitchDeg: 4, rollDeg: 0, crabDeg: 0, liftShare: 0.18 }
+// liftShare is the lift still on the wing when the wheels touch. At Vref that is nearly all of it —
+// the wing does not stop flying because the tyres touched, it stops when the spoilers kill it. The old
+// default of 0.18 belonged to a model that used this as a multiplier on load rather than as a force.
+const LEVEL: Attitude = { pitchDeg: 4, rollDeg: 0, crabDeg: 0, liftShare: 0.9 }
 
 export default function SimulateLanding() {
   const [theme, setTheme] = useTheme()
@@ -62,6 +66,29 @@ export default function SimulateLanding() {
   const frameCount = run.frames.length
   const frameStepS = run.frames[1]?.tS - run.frames[0]?.tS || 0.05
   const sideLoads = sideLoadRows(run.summary.perWheel)
+  const strutUsedM = Math.max(...r.oleo.samples.map((x) => x.strokeM))
+  // What the runway is doing to the selected tyre at this instant of the landing.
+  const fw = frame.wheel[id]
+  const pw = r.perWheel[id]
+  const impact: Impact = {
+    contactDeg: fw.contactDeg,
+    arcDeg: contactPatchDeg(fw.loadKN, tire.radiusM),
+    loadKN: fw.loadKN,
+    peakLoadKN: pw.peakLoadKN,
+    peakDeg: pw.impactDeg,
+    peakArcDeg: pw.impactArcDeg,
+    slipMps: fw.slipMps,
+    contact: fw.contact,
+  }
+  // Peak load on each axle of the truck. The aft one lands first and takes the transient; the front
+  // one is the one braking leans on. Averaging these together is exactly the mistake to avoid.
+  const axleLoads = ([2, 1, 0] as const).map((axle) => ({
+    label: ['Fwd axle', 'Mid axle', 'Aft axle'][axle] + (axle === LEAD_AXLE ? ' · lands first' : ''),
+    value: Math.round(
+      Math.max(...FLEET_TIRES.filter((t) => t.gear !== 'nose' && t.axle === axle).map((t) => r.perWheel[t.id].peakLoadKN)),
+    ),
+    color: axle === LEAD_AXLE ? HUE.crit : HUE.alt,
+  }))
 
   useEffect(() => {
     setPlaying(false)
@@ -138,7 +165,10 @@ export default function SimulateLanding() {
               <Slider label="Pitch / flare" v={att.pitchDeg} min={-2} max={12} step={0.5} unit="°" onChange={(v) => setA('pitchDeg', v)} bad={att.pitchDeg > 11} />
               <Slider label="Roll / bank" v={att.rollDeg} min={-8} max={8} step={0.5} unit="°" onChange={(v) => setA('rollDeg', v)} bad={Math.abs(att.rollDeg) > 5} />
               <Slider label="Yaw / crab" v={att.crabDeg} min={-15} max={15} step={1} unit="°" onChange={(v) => setA('crabDeg', v)} bad={Math.abs(att.crabDeg) > 10} />
-              <Slider label="Lift remaining" v={Math.round(att.liftShare * 100)} min={0} max={80} step={5} unit=" %" onChange={(v) => setA('liftShare', v / 100)} bad={att.liftShare > 0.5} />
+              {/* Both ends of this are bad, which is what makes it worth a slider: dump the lift early
+                  and the gear catches 200 t on its own (a slam); carry too much and the strut throws
+                  the aircraft back into the air (a bounce), with the brakes still doing nothing. */}
+              <Slider label="Lift at touchdown" v={Math.round(att.liftShare * 100)} min={50} max={100} step={5} unit=" %" onChange={(v) => setA('liftShare', v / 100)} bad={att.liftShare < 0.65} />
             </div>
             <button
               onClick={() => setAtt(LEVEL)}
@@ -151,7 +181,9 @@ export default function SimulateLanding() {
 
           <Card title="Touchdown parameters" tag="What-if · manual">
             <div className="space-y-3">
-              <Slider label="Landing weight" v={l.weightT} min={40} max={79} step={0.5} unit=" t" onChange={(v) => set('weightT', v)} />
+              {/* 777-300ER: empty 168 t, max landing 251.3 t. The old 40–79 t range was a narrowbody's,
+                  which put every load, energy and temperature on this page about 3x low. */}
+              <Slider label="Landing weight" v={l.weightT} min={168} max={251} step={1} unit=" t" onChange={(v) => set('weightT', v)} bad={l.weightT > 245} />
               <Slider label="Sink rate" v={l.sinkFpm} min={60} max={720} step={10} unit=" fpm" onChange={(v) => set('sinkFpm', v)} bad={l.sinkFpm > 600} />
               <Slider label="Groundspeed" v={l.gsKt} min={100} max={175} step={1} unit=" kt" onChange={(v) => set('gsKt', v)} />
               <Slider
@@ -285,20 +317,25 @@ export default function SimulateLanding() {
             />
           </div>
 
-          <Card title="Brake pack · thermal" tag="Energy model">
-            <div className="mb-3 grid grid-cols-3 gap-2">
-              <Mini label="KE at touchdown" value={`${r.keMJ.toFixed(1)} MJ`} />
+          <Card title="Bead · heat soak" tag="Thermal model">
+            <div className="mb-3 grid grid-cols-4 gap-2">
               <Mini label="Per brake" value={`${r.brakeEnergyMJ.toFixed(1)} MJ`} />
+              <Mini label="Pack peak" value={`${Math.round(r.brakePeakC)} °C`} />
               <Mini label="Bead peak" value={`${Math.round(r.beadPeakC)} °C`} bad={r.beadPeakC > CAL.fusePlugC} />
+              <Mini label="Bead peaks at" value={`+${Math.round(r.beadPeakAtS / 60)} min`} bad={r.beadPeakC > CAL.fusePlugC} />
             </div>
             <div className="mb-1 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
-              Brake temp through rollout · dashed = fuse plug {CAL.fusePlugC} °C
+              Bead temp · 45 min after touchdown · dashed = fuse plug {CAL.fusePlugC} °C
             </div>
-            <Sparkline values={brakeCurve(r, l.oatC)} unit=" °C" limit={CAL.fusePlugC} />
-            <Open>Rollout heat rate depends on how much the reversers take — brake share is a guess until it comes off the FDR</Open>
+            <Sparkline values={beadCurve(r.thermal)} unit=" °C" limit={CAL.fusePlugC} />
+            <Open>
+              The bead peaks <b>{Math.round(r.beadPeakAtS / 60)} minutes after the aircraft stops</b>, not on the runway: the pack is being blasted with cooling
+              air right up until it parks, and only then does the heat soak inward through the wheel. Fuse plugs let go on the taxiway and at the gate. This is
+              the number a turnaround hangs on, and the old model had it backwards.
+            </Open>
           </Card>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Card title="Vertical g" tag="Simulated FOQA">
             <Gauge
               value={Number(r.peakG.toFixed(2))}
@@ -311,21 +348,34 @@ export default function SimulateLanding() {
             />
             <div className="mt-3 space-y-2">
               <Field k="Sink at touchdown" v={`${l.sinkFpm} fpm`} warn={l.sinkFpm > 600} />
-              <Field k="Oleo stroke (cal.)" v={`${CAL.strokeM} m`} />
+              <Field k="Strut stroke used" v={`${strutUsedM.toFixed(2)} of ${OLEO.strokeM} m`} warn={r.bottomedOut} />
+              <Field k="Bead peaks at" v={`+${Math.round(r.beadPeakAtS / 60)} min, at the gate`} />
             </div>
-            <Open>Peak g is inferred from sink rate — the real value comes off the gear strain gauges, not this curve</Open>
+            <Open>
+              Peak g is <b>integrated</b>, not inferred: gas spring, orifice damper and the tyre under it, at 1 ms. It is the strut's own answer, so the
+              stroke and the recoil above are the same event as this number.
+            </Open>
           </Card>
 
-          <Card title="Load by wheel" tag="Crosswind roll">
-              <RowBars
-                unit=" kN"
-                max={Math.ceil(Math.max(...sideLoads.map((row) => row.value), 1) * 1.2)}
-                rows={[
-                  { label: 'Right mains', value: Math.round(sideLoads.find((row) => row.label === 'Right mains')?.value ?? 0), color: HUE.crit },
-                  { label: 'Left mains', value: Math.round(sideLoads.find((row) => row.label === 'Left mains')?.value ?? 0), color: HUE.alt },
-                ]}
-              />
-            <Open>Crosswind rolls the load onto the downwind gear — attribute wear per position, never per axle</Open>
+          <Card title="Load by gear" tag="Crosswind roll">
+            <RowBars
+              unit=" kN"
+              max={Math.ceil(Math.max(...sideLoads.map((row) => row.value), 1) * 1.2)}
+              rows={[
+                { label: 'Right mains', value: Math.round(sideLoads.find((row) => row.label === 'Right mains')?.value ?? 0), color: HUE.crit },
+                { label: 'Left mains', value: Math.round(sideLoads.find((row) => row.label === 'Left mains')?.value ?? 0), color: HUE.alt },
+              ]}
+            />
+            <Open>Crosswind rolls the load onto the downwind gear — and crabbing out the drift does not spare it, it only converts the drift into scrub</Open>
+          </Card>
+
+          <Card title="Load by axle" tag="Bogie pitch">
+            <RowBars unit=" kN" max={Math.ceil(Math.max(...axleLoads.map((row) => row.value), 1) * 1.2)} rows={axleLoads} />
+            <Open>
+              The truck hangs nose-up and lands on its <b>aft axle</b>, which carries the whole bogie alone until the strut strokes it flat — so it takes the
+              transient and does the spin-up. Then braking pitches the truck forward and the <b>front</b> axle eats the heat. Six tyres on one bogie, six
+              different lives. This is why wear is attributed per position and never averaged across the truck.
+            </Open>
           </Card>
 
           <Card title="Tread budget" tag="Projection">
@@ -356,6 +406,12 @@ export default function SimulateLanding() {
               </span>
             </div>
             <p className="mt-1 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">Click a wheel on the aircraft to switch tire</p>
+          </div>
+
+          {/* The same 3D tyre /tyres shows — with the landing on it. Scrub the timeline and the blue
+              band runs round the tread: that is the arc of rubber the runway is actually touching. */}
+          <div className="relative h-[340px] border border-[var(--line)] bg-[var(--panel)]">
+            <TireViewer defects={tire.defects} serial={tire.serial} theme={theme} impact={impact} compact />
           </div>
 
           <TireDetail tire={tire} />

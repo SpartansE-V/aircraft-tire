@@ -64,7 +64,7 @@ jobs:
         with:
           filters: |
             app:
-              - 'craft-detector-service/**'
+              - 'app/**'
             reconstructor:
               - '3d-reconstructor/**'
             web:
@@ -74,14 +74,17 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: craft-detector-service
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
-      - run: uv run pytest -q
+        with:
+          working-directory: app
+      # --extra ai pulls pandas/pillow so the RUL, CV, and maintenance-agent suites run
+      # (they are collect-ignored without it); rootdir is the repo root via ../pytest.ini.
+      - run: uv sync --extra ai
+        working-directory: app
+      - run: uv run pytest -q ../tests
+        working-directory: app
 
   deploy-app:
     needs: [changes, test-app]
@@ -105,7 +108,7 @@ jobs:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          docker build --build-arg OPENAI_API_KEY="$OPENAI_API_KEY" -t "$REGISTRY/aircraft-tire:${{ github.sha }}" craft-detector-service
+          docker build --build-arg OPENAI_API_KEY="$OPENAI_API_KEY" -t "$REGISTRY/aircraft-tire:${{ github.sha }}" app
           docker push "$REGISTRY/aircraft-tire:${{ github.sha }}"
 
       - uses: hashicorp/setup-terraform@v3

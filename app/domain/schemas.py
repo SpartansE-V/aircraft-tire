@@ -247,6 +247,81 @@ class FlightConditions(StrictSchema):
     crosswind_factor: float = Field(default=1.0, ge=1.0, le=1.5, allow_inf_nan=False)
 
 
+# NGAFID flight-data-recorder reference cycle — the sensor readings of a normal, fleet-average
+# landing. A sensor block equal to these references yields a wear multiplier of exactly 1.0. The
+# values mirror the landing-simulator calibration (web/src/sim.ts CAL) so the RUL planner and the
+# 3D landing model agree on the physics.
+NGAFID_REF_IAS_KT = 140.0  # reference indicated airspeed at touchdown (sim.ts CAL.refGsKt)
+NGAFID_REF_VSPD_FPM = 180.0  # a normal touchdown sink rate
+NGAFID_REF_NORMAC_G = 1.0  # level reference; measured touchdown g scales tire peak load
+NGAFID_REF_OAT_C = 15.0  # ISA sea-level reference temperature
+
+
+class NgafidFlightSensors(StrictSchema):
+    """Raw NGAFID FDR sensor readings for a landing that physically drive tire wear.
+
+    The NGAFID Maintenance-Classification dataset records 23 per-second sensors, but only these five
+    couple to landing-gear tire wear — spin-up scrub, touchdown impact load, and thermal wear rate.
+    The electrical (volt/amp), fuel (FQty/FFlow) and powerplant (OilT/OilP/RPM/CHT/EGT) channels
+    describe engine and avionics health, not the tire, and are intentionally excluded.
+
+    Every field defaults to its reference value, so an unset or all-default block is a normal cycle
+    with wear multiplier 1.0. Values are raw sensor units, not normalized factors — the service
+    converts them to a position-weighted multiplier using documented physical sensitivities.
+    """
+
+    indicated_airspeed_kt: float = Field(
+        default=NGAFID_REF_IAS_KT,
+        ge=40.0,
+        le=250.0,
+        allow_inf_nan=False,
+        description=(
+            "NGAFID IAS — indicated airspeed at touchdown (knots). Drives tire spin-up "
+            "scrub, which grows with the square of true ground speed."
+        ),
+    )
+    vertical_speed_fpm: float = Field(
+        default=NGAFID_REF_VSPD_FPM,
+        ge=0.0,
+        le=1500.0,
+        allow_inf_nan=False,
+        description=(
+            "NGAFID VSpd — descent (sink) rate at touchdown (feet/min, magnitude). A higher sink "
+            "rate is a harder vertical impact on the tire."
+        ),
+    )
+    normal_acceleration_g: float = Field(
+        default=NGAFID_REF_NORMAC_G,
+        ge=0.5,
+        le=4.0,
+        allow_inf_nan=False,
+        description=(
+            "NGAFID NormAc — measured vertical acceleration at touchdown (g). Tire peak "
+            "load scales with landing g."
+        ),
+    )
+    outside_air_temperature_c: float = Field(
+        default=NGAFID_REF_OAT_C,
+        ge=-40.0,
+        le=55.0,
+        allow_inf_nan=False,
+        description=(
+            "NGAFID OAT — outside air temperature (°C). Warmer rubber and hotter runways wear the "
+            "tread faster."
+        ),
+    )
+    altitude_msl_ft: float = Field(
+        default=0.0,
+        ge=-1500.0,
+        le=15000.0,
+        allow_inf_nan=False,
+        description=(
+            "NGAFID AltMSL — field/pressure altitude at touchdown (feet MSL). Thin air raises the "
+            "true touchdown speed for the same indicated airspeed."
+        ),
+    )
+
+
 class TireRulPredictionRequest(StrictSchema):
     """A single wheel's readings and utilization for one remaining-useful-life forecast."""
 
@@ -292,6 +367,14 @@ class TireRulPredictionRequest(StrictSchema):
     flight_conditions: FlightConditions = Field(
         default_factory=FlightConditions,
         description="Wear factors applied only to planned_landings; defaults to normal exposure.",
+    )
+    flight_sensors: NgafidFlightSensors | None = Field(
+        default=None,
+        description=(
+            "Optional raw NGAFID FDR sensor readings (IAS, VSpd, NormAc, OAT, AltMSL) for the "
+            "planned landings. When present, their wear multiplier combines with "
+            "flight_conditions; when omitted, only flight_conditions applies."
+        ),
     )
     landings_per_day: float = Field(
         gt=0.0,
@@ -352,7 +435,17 @@ class TireRulPredictionResponse(StrictSchema):
     )
     landings_per_day: float
     wear_exposure_multiplier: float = Field(
-        description="Position-specific multiplier applied to the newly planned landings."
+        description=(
+            "Combined position-specific multiplier applied to the newly planned landings "
+            "(flight_conditions × NGAFID sensor exposure)."
+        )
+    )
+    sensor_wear_multiplier: float = Field(
+        default=1.0,
+        description=(
+            "Contribution of the NGAFID FDR sensors (IAS/VSpd/NormAc/OAT/AltMSL) to the exposure "
+            "multiplier. 1.0 when no sensor block was supplied or all readings were at reference."
+        ),
     )
     effective_planned_landings: float = Field(
         description="Planned landings converted to fleet-average wear-equivalent landings."

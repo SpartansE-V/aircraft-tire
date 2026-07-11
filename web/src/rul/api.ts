@@ -18,6 +18,12 @@ export type InspectionReading = {
   measured_groove_mm: number
 }
 
+export type WheelCell = {
+  status: RulStatus | null
+  loading: boolean
+  error: ApiError | null
+}
+
 export type FlightConditions = {
   landing_load_factor: number
   braking_energy_factor: number
@@ -30,11 +36,24 @@ export type FlightConditions = {
   crosswind_factor: number
 }
 
+// Raw NGAFID flight-data-recorder sensors that physically drive tire wear. Only these five of the
+// dataset's 23 channels couple to the tire (spin-up scrub, touchdown load, thermal wear); the
+// electrical/fuel/engine channels describe powerplant health and are not sent. Units are raw sensor
+// values, not normalized factors — the backend converts them to a position-weighted multiplier.
+export type NgafidFlightSensors = {
+  indicated_airspeed_kt: number // IAS — touchdown airspeed
+  vertical_speed_fpm: number // VSpd — sink rate at touchdown
+  normal_acceleration_g: number // NormAc — measured landing g
+  outside_air_temperature_c: number // OAT — outside air temperature
+  altitude_msl_ft: number // AltMSL — field/pressure altitude
+}
+
 export type RulPredictionRequest = {
   position: WheelPosition
   current_cycles: number
   planned_landings?: number
   flight_conditions?: FlightConditions
+  flight_sensors?: NgafidFlightSensors
   landings_per_day: number
   readings: InspectionReading[]
   as_of_date?: string // ISO YYYY-MM-DD
@@ -63,6 +82,7 @@ export type RulPredictionResponse = {
   p_cross_before_next_check: number
   landings_per_day: number
   wear_exposure_multiplier: number
+  sensor_wear_multiplier: number
   effective_planned_landings: number
   readings_used: number
   low_confidence: boolean
