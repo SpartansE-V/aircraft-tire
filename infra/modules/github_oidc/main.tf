@@ -147,6 +147,30 @@ data "aws_iam_policy_document" "github_actions_deploy" {
     ]
     resources = ["*"]
   }
+
+  # ECS task execution/task roles are part of this stack too, so Terraform
+  # needs full lifecycle management of them specifically (scoped by name,
+  # unlike the broader read-only statement above).
+  statement {
+    sid    = "ManageECSTaskRoles"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:UpdateRole",
+      "iam:UpdateAssumeRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+    ]
+    resources = [
+      "arn:aws:iam::*:role/${var.project_name}-ecs-execution-role",
+      "arn:aws:iam::*:role/${var.project_name}-ecs-task-role",
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "github_actions_deploy" {
