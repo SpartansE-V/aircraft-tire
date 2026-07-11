@@ -13,13 +13,14 @@ locals {
   # ECS service so app/ and 3d-reconstructor/ deploy independently.
   services = {
     app = {
-      name           = var.project_name
-      alb_name       = var.project_name
-      container_port = 8000
-      task_cpu       = 256
-      task_memory    = 512
-      desired_count  = 2
-      image_tag      = var.image_tag_app
+      name              = var.project_name
+      alb_name          = var.project_name
+      container_port    = 8000
+      task_cpu          = 256
+      task_memory       = 512
+      desired_count     = 2
+      image_tag         = var.image_tag_app
+      health_check_path = "/health"
       environment = [
         { name = "PORT", value = "8000" },
         { name = "CORS_ORIGINS", value = var.cors_origins },
@@ -30,21 +31,23 @@ locals {
       alb_name       = "${var.project_name}-recon"
       container_port = 8000
       # COLMAP reconstruction is CPU/memory heavy compared to the API service.
-      task_cpu      = 2048
-      task_memory   = 8192
-      desired_count = 1
-      image_tag     = var.image_tag_reconstructor
-      environment   = [] # Dockerfile ENV defaults cover COLMAP_* config.
+      task_cpu          = 2048
+      task_memory       = 8192
+      desired_count     = 1
+      image_tag         = var.image_tag_reconstructor
+      environment       = [] # Dockerfile ENV defaults cover COLMAP_* config.
+      health_check_path = "/api/v1/health" # health router is mounted under api_prefix
     }
     web = {
-      name           = "${var.project_name}-web"
-      alb_name       = "${var.project_name}-web"
-      container_port = 80
-      task_cpu       = 256
-      task_memory    = 512
-      desired_count  = 2
-      image_tag      = var.image_tag_web
-      environment    = [] # Static build; no runtime config needed.
+      name              = "${var.project_name}-web"
+      alb_name          = "${var.project_name}-web"
+      container_port    = 80
+      task_cpu          = 256
+      task_memory       = 512
+      desired_count     = 2
+      image_tag         = var.image_tag_web
+      environment       = [] # Static build; no runtime config needed.
+      health_check_path = "/health"
     }
   }
 }
@@ -85,6 +88,7 @@ module "alb" {
   vpc_id            = module.network.vpc_id
   public_subnet_ids = module.network.public_subnet_ids
   container_port    = each.value.container_port
+  health_check_path = each.value.health_check_path
   tags              = local.tags
 }
 
