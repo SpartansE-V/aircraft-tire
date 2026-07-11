@@ -8,12 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-# app/rul/paths.py -> parents[2] == the service root after the monorepo split. During the
-# merge, the RUL data/config/artifacts may still live at the repository root, so prefer the
-# service root when assets are colocated there and otherwise fall back one level up.
-SERVICE_ROOT = Path(__file__).resolve().parents[2]
-REPOSITORY_ROOT = SERVICE_ROOT.parent
-PROJECT_ROOT = SERVICE_ROOT if (SERVICE_ROOT / "artifacts").exists() else REPOSITORY_ROOT
+# app/rul/paths.py -> parents[2] == the repository root, where data/, artifacts/, and config/ live.
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = PROJECT_ROOT / "data"
 ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
