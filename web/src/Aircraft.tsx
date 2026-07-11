@@ -250,8 +250,11 @@ export default function Aircraft({
     ring.visible = false // TorusGeometry already lies in XY with a +z normal — the wheel's own plane
     plane.add(ring)
 
-    type Wheel = ReturnType<typeof mapWheels>[number] & { local: THREE.Vector3 }
+    // `rest` is where the wheel mesh sits in its own parent's frame with the gear as the model was
+    // authored (parked). The strut squat is applied as an offset from it, so it never accumulates.
+    type Wheel = ReturnType<typeof mapWheels>[number] & { local: THREE.Vector3; rest: THREE.Vector3 }
     let wheels: Wheel[] = []
+    const unsprung: { mesh: THREE.Mesh; rest: THREE.Vector3 }[] = []
     let pickable: THREE.Mesh[] = []
     const selectedRef = { current: selected }
     const camRef = { current: cam } // the preset the user picked while the airframe was still loading
@@ -285,7 +288,34 @@ export default function Aircraft({
       // `local` is what everything downstream uses (pips, the selection ring, the tire-clearance
       // raise): world positions carry wherever the aircraft currently is on the approach, which is
       // not a property of the airframe.
-      wheels = mapWheels(model).map((w) => ({ ...w, local: plane.worldToLocal(w.c.clone()) }))
+      wheels = mapWheels(model).map((w) => ({
+        ...w,
+        local: plane.worldToLocal(w.c.clone()),
+        rest: w.mesh.position.clone(),
+      }))
+
+      // The *unsprung* assembly: everything below the strut that travels with the wheels rather than
+      // with the aeroplane — the truck beam, the axles, the brake units, the sliding piston. The strut
+      // compresses between this and the airframe, so these have to move together with the tyres.
+      // Moving only the black rubber leaves the wheels hanging visibly off their own bogie, which is
+      // how this looked before: the gear extended and the tyres detached from the truck they bolt to.
+      //
+      // No node names to go on (the GLB's are Sketchfab noise), so use geometry: anything whose centre
+      // sits within a couple of wheel-radii of a bogie's wheel cluster belongs to that bogie.
+      const clusters = ['N', 'L', 'R'].map((side) => {
+        const ws = wheels.filter((w) => w.id.startsWith(side))
+        const c = ws.reduce((a, w) => a.add(w.c.clone()), new THREE.Vector3()).divideScalar(ws.length || 1)
+        return { c, reach: 2.4 * (ws.reduce((a, w) => a + w.r, 0) / (ws.length || 1)) }
+      })
+      const wheelSet = new Set(wheels.map((w) => w.mesh))
+      const bs = new THREE.Vector3()
+      model.traverse((o) => {
+        const m = o as THREE.Mesh
+        if (!m.isMesh || wheelSet.has(m)) return
+        m.geometry.computeBoundingSphere()
+        bs.copy(m.geometry.boundingSphere!.center).applyMatrix4(m.matrixWorld)
+        if (clusters.some((cl) => bs.distanceTo(cl.c) < cl.reach)) unsprung.push({ mesh: m, rest: m.position.clone() })
+      })
       pickable = wheels.map((w) => w.mesh)
       for (const w of wheels) {
         w.mesh.userData.tireId = w.id
@@ -374,6 +404,10 @@ export default function Aircraft({
     let currentFrame: LandingFrame | undefined = frame
     const wheelPos = new THREE.Vector3()
     const cameraFollow = new THREE.Vector3()
+    const cameraTarget = new THREE.Vector3()
+    const invParent = new THREE.Matrix4()
+    const localUp = new THREE.Vector3()
+    const localOrigin = new THREE.Vector3()
     const applyPose = (a: Attitude, f?: LandingFrame) => {
       currentAttitude = a
       currentFrame = f
@@ -383,27 +417,61 @@ export default function Aircraft({
       plane.position.x = pose.xM
       plane.position.z = pose.zM
 
-      if (!wheels.length) {
-        plane.position.y = pose.yM
-      } else {
-        // Bank lowers the down-wing tires. Raise the aircraft by the exact amount needed so the lowest
-        // tire stays on top of the runway instead of clipping through it.
-        let lowestTire = Infinity
-        for (const w of wheels) {
-          const bottomY = wheelPos.copy(w.local).applyEuler(plane.rotation).y - w.r
-          lowestTire = Math.min(lowestTire, bottomY)
-        }
-        plane.position.y = pose.yM + Math.max(0, -lowestTire)
+      // Where the wheels sit: the approach, then the runway. Bank lowers the down-wing tires, so raise
+      // the aircraft by exactly enough to keep the lowest one on top of the runway rather than through
+      // it. (Squat cancels out of this: the wheels were lifted by the same amount the airframe was
+      // dropped, so their height above the runway is unchanged — which is the entire point.)
+      let lowestTire = Infinity
+      for (const w of wheels) {
+        const bottomY = wheelPos.copy(w.local).applyEuler(plane.rotation).y - w.r
+        lowestTire = Math.min(lowestTire, bottomY)
       }
+      const wheelY = pose.yM + (wheels.length ? Math.max(0, -lowestTire) : 0)
+
+      // THE STRUT, made visible. The airframe drops onto its gear, the gas spring pushes it part of the
+      // way back out, it settles — and on a hard arrival it skips the tyres clear of the runway. The
+      // GLB is rigid, so a squat cannot simply move it: that drives the tyres through the tarmac. Drop
+      // the airframe, lift the wheel meshes by the same amount, and the wheels stay planted exactly
+      // where the runway is while the fuselage does the moving. Which is what a strut is.
+      const squat = f?.squatM ?? 0
+      plane.position.y = wheelY - squat
+      plane.updateMatrixWorld(true)
+
+      // The offset has to be a real metre of world height, and getting it there is the fiddly part: the
+      // wheel meshes hang deep inside the GLB's hierarchy under a chain of scales that multiply out to
+      // roughly (0.096, 0.071, 0.071) — and it is *non-uniform*, so no single divisor undoes it. Push
+      // the mesh a naive `squat` along its own local +Y and a 43 cm strut stroke arrives as 3 cm, which
+      // is exactly nothing, and the gear looks welded. Going through the parent's inverse world matrix
+      // converts one world metre of +Y into whatever that means down there, scale and rotation and all.
+      const lift = (mesh: THREE.Mesh, rest: THREE.Vector3) => {
+        const inv = invParent.copy(mesh.parent!.matrixWorld).invert()
+        const local = localUp.set(0, 1, 0).applyMatrix4(inv).sub(localOrigin.set(0, 0, 0).applyMatrix4(inv))
+        mesh.position.copy(rest).addScaledVector(local, squat)
+      }
+      for (const w of wheels) {
+        lift(w.mesh, w.rest)
+        const pip = pips.get(w.id)
+        if (pip) pip.position.set(w.local.x, w.local.y + squat, w.local.z)
+      }
+      for (const u of unsprung) lift(u.mesh, u.rest) // the truck, axles and brakes come with the wheels
+      const sel = wheels.find((w) => w.id === selectedRef.current)
+      if (sel && ring.visible) ring.position.set(sel.local.x, sel.local.y + squat, sel.local.z)
 
       // Follow the aircraft in all three axes, not just along the runway. On short final it is a few
       // hundred metres out AND tens of metres up; tracking only x/z left the camera staring at the
       // grass under the approach path while the aircraft flew overhead, out of frame.
-      const delta = plane.position.clone().sub(cameraFollow)
+      //
+      // Follow where the aircraft *is* (`wheelY`), NOT where its fuselage has been dragged to by the
+      // gear (`plane.position.y`, which carries the squat). Track the squat and the camera sinks with
+      // the airframe by exactly the amount the strut compressed — perfectly cancelling it. The gear
+      // then strokes, recoils and skips in complete stillness, which is precisely the bug that hid the
+      // whole strut model: correct simulation, correct render, camera subtracting the answer.
+      cameraTarget.set(plane.position.x, wheelY, plane.position.z)
+      const delta = cameraTarget.clone().sub(cameraFollow)
       if (delta.lengthSq() > 0) {
         camera.position.add(delta)
         controls.target.add(delta)
-        cameraFollow.copy(plane.position)
+        cameraFollow.copy(cameraTarget)
         controls.update()
       }
     }
