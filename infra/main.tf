@@ -146,6 +146,10 @@ module "uploads" {
   cors_allowed_origins          = split(",", var.cors_origins)
   presigned_url_expiration_secs = var.upload_presigned_url_expiration_secs
   tags                          = local.tags
+
+  # The deploy role grants itself the Lambda/API Gateway/IAM permissions used
+  # by this module. Apply that policy update before creating upload resources.
+  depends_on = [module.github_oidc]
 }
 
 resource "aws_iam_role_policy" "task_uploads_access" {
