@@ -13,7 +13,11 @@ For images up to 4 MiB, upload directly through the API with one field named
 `file`:
 
 ```bash
-curl -X POST "$IMAGE_UPLOAD_URL" -F "file=@tire-left.jpg;type=image/jpeg"
+curl -X POST "$IMAGE_UPLOAD_URL" \
+  -F "aircraft_id=aircraft-uuid" \
+  -F "tail_number=VN-A701" \
+  -F "wheel_position=LEFT_MAIN_INBOARD" \
+  -F "file=@tire-left.jpg;type=image/jpeg"
 ```
 
 The endpoint validates the declared MIME type against the file signature and
@@ -28,7 +32,10 @@ Create a URL:
 {
   "action": "put",
   "fileName": "tire-left.jpg",
-  "contentType": "image/jpeg"
+  "contentType": "image/jpeg",
+  "aircraftId": "aircraft-uuid",
+  "tailNumber": "VN-A701",
+  "wheelPosition": "LEFT_MAIN_INBOARD"
 }
 ```
 
@@ -44,7 +51,10 @@ the same `Content-Type` value used above.
      "action": "createMultipart",
      "fileName": "tire-scan.tiff",
      "contentType": "image/tiff",
-     "partCount": 3
+     "partCount": 3,
+     "aircraftId": "aircraft-uuid",
+     "tailNumber": "VN-A701",
+     "wheelPosition": "LEFT_MAIN_INBOARD"
    }
    ```
 
@@ -73,3 +83,20 @@ The bucket lifecycle also aborts incomplete multipart uploads after seven days.
 The endpoint currently has no application authentication. CORS limits browser
 origins but is not an authorization boundary; add an API Gateway authorizer
 before exposing this outside the current trusted application environment.
+
+## Image metadata
+
+Every upload creates a record in the `aircraft-tire-upload-images` DynamoDB
+table. `image_id` is the primary key. The `aircraft-created-at-index` GSI uses
+`aircraft_id` as its partition key and `created_at` as its sort key, allowing
+images to be queried per aircraft in chronological order.
+
+The table uses on-demand billing, point-in-time recovery, encryption at rest,
+and deletion protection. Disable deletion protection explicitly before an
+intentional Terraform destroy.
+
+Records contain `aircraft_id`, optional `tail_number` and `wheel_position`, S3
+bucket/key, original filename, MIME type, size, ETag/version, upload status, and
+UTC timestamps. Upload status moves through `PENDING`, `UPLOADED`, `FAILED`, or
+`ABORTED`; S3 ObjectCreated events reconcile presigned uploads after the client
+writes the object directly to S3.

@@ -29,6 +29,11 @@ output "image_upload_url" {
   value       = module.uploads.image_upload_url
 }
 
+output "upload_images_table_name" {
+  description = "DynamoDB table containing uploaded image metadata."
+  value       = module.uploads.image_table_name
+}
+
 output "github_actions_role_arn" {
   description = "Role ARN GitHub Actions assumes via OIDC. Set as the AWS_ROLE_ARN repo secret."
   value       = module.github_oidc.role_arn

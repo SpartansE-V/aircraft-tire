@@ -4,14 +4,17 @@ import os
 import re
 import uuid
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from email import policy
 from email.parser import BytesParser
 from typing import Any
+from urllib.parse import unquote_plus
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 UPLOAD_BUCKET = os.environ["UPLOAD_BUCKET"]
+IMAGE_TABLE = os.environ["IMAGE_TABLE"]
 URL_EXPIRATION_SECS = int(os.environ.get("URL_EXPIRATION_SECS", "900"))
 MAX_DIRECT_UPLOAD_BYTES = int(os.environ.get("MAX_DIRECT_UPLOAD_BYTES", str(4 * 1024 * 1024)))
 MAX_MULTIPART_PARTS = 100
@@ -31,6 +34,7 @@ KEY_PATTERN = re.compile(r"^uploads/[0-9a-f-]{36}/[A-Za-z0-9._-]{1,120}$")
 SAFE_FILENAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 s3 = boto3.client("s3")
+dynamodb = boto3.client("dynamodb")
 
 
 class RequestError(ValueError):
@@ -108,7 +112,34 @@ def _image_type(content: bytes) -> str | None:
     return None
 
 
-def _multipart_image(event: Mapping[str, Any]) -> tuple[str, str, bytes]:
+def _text_field(
+    payload: Mapping[str, Any], key: str, *, required: bool = False, max_length: int = 128
+) -> str | None:
+    value = payload.get(key)
+    if value is None and not required:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise RequestError(f"{key} is required." if required else f"{key} must be text.")
+    value = value.strip()
+    if len(value) > max_length:
+        raise RequestError(f"{key} cannot exceed {max_length} characters.")
+    return value
+
+
+def _aircraft_metadata(payload: Mapping[str, Any]) -> dict[str, str]:
+    aircraft_id = _text_field(payload, "aircraftId", required=True)
+    assert aircraft_id is not None
+    metadata = {"aircraft_id": aircraft_id}
+    tail_number = _text_field(payload, "tailNumber", max_length=32)
+    wheel_position = _text_field(payload, "wheelPosition", max_length=64)
+    if tail_number:
+        metadata["tail_number"] = tail_number
+    if wheel_position:
+        metadata["wheel_position"] = wheel_position
+    return metadata
+
+
+def _multipart_image(event: Mapping[str, Any]) -> tuple[str, str, bytes, dict[str, str]]:
     content_type = _header(event, "content-type")
     if not content_type or not content_type.lower().startswith("multipart/form-data;"):
         raise RequestError("Content-Type must be multipart/form-data with a boundary.")
@@ -119,10 +150,9 @@ def _multipart_image(event: Mapping[str, Any]) -> tuple[str, str, bytes]:
 
     envelope = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode() + body
     message = BytesParser(policy=policy.default).parsebytes(envelope)
+    parts = list(message.iter_parts())
     files = [
-        part
-        for part in message.iter_parts()
-        if part.get_param("name", header="content-disposition") == "file"
+        part for part in parts if part.get_param("name", header="content-disposition") == "file"
     ]
     if len(files) != 1:
         raise RequestError("Multipart body must contain exactly one file field named 'file'.")
@@ -146,19 +176,136 @@ def _multipart_image(event: Mapping[str, Any]) -> tuple[str, str, bytes]:
         detected_type, {detected_type}
     ):
         raise RequestError("File content does not match its supported image Content-Type.")
-    return filename, declared_type, content
+
+    form_fields: dict[str, str] = {}
+    field_aliases = {
+        "aircraft_id": "aircraftId",
+        "tail_number": "tailNumber",
+        "wheel_position": "wheelPosition",
+    }
+    for form_name, json_name in field_aliases.items():
+        matching = [
+            candidate
+            for candidate in parts
+            if candidate.get_param("name", header="content-disposition") == form_name
+        ]
+        if len(matching) > 1:
+            raise RequestError(f"Multipart field '{form_name}' cannot be repeated.")
+        if matching:
+            value = matching[0].get_content()
+            if isinstance(value, str):
+                form_fields[json_name] = value
+    return filename, declared_type, content, _aircraft_metadata(form_fields)
+
+
+def _image_id(key: str) -> str:
+    return key.split("/", 2)[1]
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _create_image_record(
+    *,
+    key: str,
+    filename: str,
+    content_type: str,
+    metadata: Mapping[str, str],
+    size_bytes: int | None = None,
+    upload_id: str | None = None,
+) -> None:
+    timestamp = _now()
+    item = {
+        "image_id": {"S": _image_id(key)},
+        "aircraft_id": {"S": metadata["aircraft_id"]},
+        "s3_bucket": {"S": UPLOAD_BUCKET},
+        "s3_key": {"S": key},
+        "original_filename": {"S": filename},
+        "content_type": {"S": content_type},
+        "upload_status": {"S": "PENDING"},
+        "created_at": {"S": timestamp},
+        "updated_at": {"S": timestamp},
+    }
+    for name in ("tail_number", "wheel_position"):
+        if value := metadata.get(name):
+            item[name] = {"S": value}
+    if size_bytes is not None:
+        item["size_bytes"] = {"N": str(size_bytes)}
+    if upload_id:
+        item["multipart_upload_id"] = {"S": upload_id}
+
+    dynamodb.put_item(
+        TableName=IMAGE_TABLE,
+        Item=item,
+        ConditionExpression="attribute_not_exists(image_id)",
+    )
+
+
+def _update_image_status(
+    image_id: str,
+    status: str,
+    *,
+    etag: str | None = None,
+    version_id: str | None = None,
+    size_bytes: int | None = None,
+) -> None:
+    names = {"#status": "upload_status"}
+    values = {
+        ":status": {"S": status},
+        ":updated": {"S": _now()},
+    }
+    assignments = ["#status = :status", "updated_at = :updated"]
+    for name, value, data_type in (
+        ("etag", etag, "S"),
+        ("version_id", version_id, "S"),
+        ("size_bytes", size_bytes, "N"),
+    ):
+        if value is not None:
+            placeholder = f":{name}"
+            assignments.append(f"{name} = {placeholder}")
+            values[placeholder] = {data_type: str(value)}
+
+    dynamodb.update_item(
+        TableName=IMAGE_TABLE,
+        Key={"image_id": {"S": image_id}},
+        UpdateExpression=f"SET {', '.join(assignments)}",
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+        ConditionExpression="attribute_exists(image_id)",
+    )
 
 
 def _upload_image(event: Mapping[str, Any]) -> dict[str, Any]:
-    filename, content_type, content = _multipart_image(event)
+    filename, content_type, content, metadata = _multipart_image(event)
     key = _new_key({"fileName": filename})
-    uploaded = s3.put_object(
-        Bucket=UPLOAD_BUCKET,
-        Key=key,
-        Body=content,
-        ContentType=content_type,
+    image_id = _image_id(key)
+    _create_image_record(
+        key=key,
+        filename=filename,
+        content_type=content_type,
+        metadata=metadata,
+        size_bytes=len(content),
+    )
+    try:
+        uploaded = s3.put_object(
+            Bucket=UPLOAD_BUCKET,
+            Key=key,
+            Body=content,
+            ContentType=content_type,
+        )
+    except (BotoCoreError, ClientError):
+        _update_image_status(image_id, "FAILED")
+        raise
+    _update_image_status(
+        image_id,
+        "UPLOADED",
+        etag=uploaded.get("ETag"),
+        version_id=uploaded.get("VersionId"),
+        size_bytes=len(content),
     )
     return {
+        "imageId": image_id,
         "key": key,
         "etag": uploaded.get("ETag"),
         "versionId": uploaded.get("VersionId"),
@@ -197,6 +344,7 @@ def _existing_upload(payload: Mapping[str, Any]) -> tuple[str, str]:
 
 def _create_put(payload: Mapping[str, Any]) -> dict[str, Any]:
     content_type = _content_type(payload)
+    metadata = _aircraft_metadata(payload)
     key = _new_key(payload)
     url = s3.generate_presigned_url(
         "put_object",
@@ -204,11 +352,24 @@ def _create_put(payload: Mapping[str, Any]) -> dict[str, Any]:
         ExpiresIn=URL_EXPIRATION_SECS,
         HttpMethod="PUT",
     )
-    return {"action": "put", "key": key, "uploadUrl": url, "expiresIn": URL_EXPIRATION_SECS}
+    _create_image_record(
+        key=key,
+        filename=str(payload["fileName"]),
+        content_type=content_type,
+        metadata=metadata,
+    )
+    return {
+        "action": "put",
+        "imageId": _image_id(key),
+        "key": key,
+        "uploadUrl": url,
+        "expiresIn": URL_EXPIRATION_SECS,
+    }
 
 
 def _create_multipart(payload: Mapping[str, Any]) -> dict[str, Any]:
     content_type = _content_type(payload)
+    metadata = _aircraft_metadata(payload)
     part_count = payload.get("partCount")
     if isinstance(part_count, bool) or not isinstance(part_count, int):
         raise RequestError("partCount must be an integer.")
@@ -222,6 +383,17 @@ def _create_multipart(payload: Mapping[str, Any]) -> dict[str, Any]:
         ContentType=content_type,
     )
     upload_id = created["UploadId"]
+    try:
+        _create_image_record(
+            key=key,
+            filename=str(payload["fileName"]),
+            content_type=content_type,
+            metadata=metadata,
+            upload_id=upload_id,
+        )
+    except (BotoCoreError, ClientError):
+        s3.abort_multipart_upload(Bucket=UPLOAD_BUCKET, Key=key, UploadId=upload_id)
+        raise
     part_urls = [
         {
             "partNumber": part_number,
@@ -241,6 +413,7 @@ def _create_multipart(payload: Mapping[str, Any]) -> dict[str, Any]:
     ]
     return {
         "action": "createMultipart",
+        "imageId": _image_id(key),
         "key": key,
         "uploadId": upload_id,
         "parts": part_urls,
@@ -282,6 +455,12 @@ def _complete_multipart(payload: Mapping[str, Any]) -> dict[str, Any]:
         UploadId=upload_id,
         MultipartUpload={"Parts": parts},
     )
+    _update_image_status(
+        _image_id(key),
+        "UPLOADED",
+        etag=completed.get("ETag"),
+        version_id=completed.get("VersionId"),
+    )
     return {
         "action": "completeMultipart",
         "key": key,
@@ -293,11 +472,42 @@ def _complete_multipart(payload: Mapping[str, Any]) -> dict[str, Any]:
 def _abort_multipart(payload: Mapping[str, Any]) -> dict[str, Any]:
     key, upload_id = _existing_upload(payload)
     s3.abort_multipart_upload(Bucket=UPLOAD_BUCKET, Key=key, UploadId=upload_id)
+    _update_image_status(_image_id(key), "ABORTED")
     return {"action": "abortMultipart", "key": key}
+
+
+def _handle_s3_event(event: Mapping[str, Any]) -> dict[str, int]:
+    processed = 0
+    records = event.get("Records")
+    if not isinstance(records, list):
+        return {"processed": processed}
+    for record in records:
+        try:
+            s3_record = record["s3"]
+            key = unquote_plus(s3_record["object"]["key"])
+            if not KEY_PATTERN.fullmatch(key):
+                continue
+            _update_image_status(
+                _image_id(key),
+                "UPLOADED",
+                etag=s3_record["object"].get("eTag"),
+                version_id=s3_record["object"].get("versionId"),
+                size_bytes=s3_record["object"].get("size"),
+            )
+            processed += 1
+        except (KeyError, TypeError):
+            continue
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+    return {"processed": processed}
 
 
 def lambda_handler(event: Mapping[str, Any], _context: Any) -> dict[str, Any]:
     try:
+        if "Records" in event:
+            return _handle_s3_event(event)
+
         path = event.get("rawPath")
         if path == IMAGE_UPLOAD_PATH:
             return _response(201, _upload_image(event))
@@ -321,4 +531,4 @@ def lambda_handler(event: Mapping[str, Any], _context: Any) -> dict[str, Any]:
     except RequestError as exc:
         return _response(400, {"error": str(exc)})
     except (BotoCoreError, ClientError):
-        return _response(502, {"error": "S3 could not process the upload request."})
+        return _response(502, {"error": "Upload storage could not process the request."})
