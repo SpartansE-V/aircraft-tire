@@ -1,4 +1,4 @@
-.PHONY: install install-ai run run-api run-web ui data enrich-scans scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
+.PHONY: install install-ai run run-api run-web ui data enrich-scans sync-mock-tyres scans logs train test lint format-check type-check compile check docker-build docker-up docker-down docker-logs
 
 WEB_DIR := ../web
 # Package imports are `app.*`; the uv project lives in this directory, so the repo
@@ -32,6 +32,9 @@ data:
 
 enrich-scans:
 	uv run python -m app.tire_rul.enrich_tire_assets
+
+sync-mock-tyres:
+	uv run python ../scripts/sync_mock_tyres_s3.py
 
 scans:
 	uv run python -m app.tire_rul.generate_scans

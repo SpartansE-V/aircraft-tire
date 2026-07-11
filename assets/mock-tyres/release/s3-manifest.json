@@ -1,0 +1,157 @@
+{
+  "bucket": "aircraft-tire-uploads-442147575477",
+  "objects": {
+    "1h233b/circle.png": {
+      "bytes": 2695098,
+      "etag": "\"6f2633534325c130ed852fe771398826\"",
+      "imageId": "bcf12b71-d954-419c-b421-ed5f675e7672",
+      "key": "uploads/bcf12b71-d954-419c-b421-ed5f675e7672/circle.png"
+    },
+    "1h233b/flatten-left.png": {
+      "bytes": 919685,
+      "etag": "\"6bd58e8da8101e4a4429e5c66f574005\"",
+      "imageId": "2b67fa1c-7caf-4f5d-9961-ec5f525740ab",
+      "key": "uploads/2b67fa1c-7caf-4f5d-9961-ec5f525740ab/flatten-left.png"
+    },
+    "1h233b/flatten-right.png": {
+      "bytes": 994467,
+      "etag": "\"96d7cee3942fe29874aa16e1ace8aeeb\"",
+      "imageId": "4434717e-2ee2-416c-bb0a-66c237e5b293",
+      "key": "uploads/4434717e-2ee2-416c-bb0a-66c237e5b293/flatten-right.png"
+    },
+    "1h233b/frame-0.png": {
+      "bytes": 353884,
+      "etag": "\"eced60b691352a4ef0eeb48dee70e72e\"",
+      "imageId": "ae91aeac-9dc2-49f3-ac92-3d404761c886",
+      "key": "uploads/ae91aeac-9dc2-49f3-ac92-3d404761c886/frame-0.png"
+    },
+    "1h233b/frame-120.png": {
+      "bytes": 340006,
+      "etag": "\"170a8d0a6f551322191c704310421097\"",
+      "imageId": "f6040b37-8d75-482b-b8f4-2f3f8be766c2",
+      "key": "uploads/f6040b37-8d75-482b-b8f4-2f3f8be766c2/frame-120.png"
+    },
+    "1h233b/frame-240.png": {
+      "bytes": 351957,
+      "etag": "\"551d52f566259ef74c1b4edbf3bcc5e0\"",
+      "imageId": "397de15e-8056-46b2-b2f9-851ab6324a1e",
+      "key": "uploads/397de15e-8056-46b2-b2f9-851ab6324a1e/frame-240.png"
+    },
+    "8fh20v/circle.png": {
+      "bytes": 2534568,
+      "etag": "\"f7baa86e0b2ffe5e9b63aaf3c38b2346\"",
+      "imageId": "6f7e6a8b-302e-47e3-8e06-7055fc62390b",
+      "key": "uploads/6f7e6a8b-302e-47e3-8e06-7055fc62390b/circle.png"
+    },
+    "8fh20v/flatten-left.png": {
+      "bytes": 1412800,
+      "etag": "\"43f9fc8527c9914d0b69a7a4c3637d72\"",
+      "imageId": "c1e3314c-a7ca-4b35-ac26-2c081293797d",
+      "key": "uploads/c1e3314c-a7ca-4b35-ac26-2c081293797d/flatten-left.png"
+    },
+    "8fh20v/flatten-right.png": {
+      "bytes": 994467,
+      "etag": "\"96d7cee3942fe29874aa16e1ace8aeeb\"",
+      "imageId": "c8b801e8-569a-431e-a9c4-07595306da37",
+      "key": "uploads/c8b801e8-569a-431e-a9c4-07595306da37/flatten-right.png"
+    },
+    "8fh20v/frame-0.png": {
+      "bytes": 464736,
+      "etag": "\"7058c3aaa96db7f17162d4f67f103009\"",
+      "imageId": "028bfb41-9fd7-4087-9ee4-979e0db173ed",
+      "key": "uploads/028bfb41-9fd7-4087-9ee4-979e0db173ed/frame-0.png"
+    },
+    "8fh20v/frame-120.png": {
+      "bytes": 462019,
+      "etag": "\"e89f9e3bd5d64e5462fc1ac06a4e1e0c\"",
+      "imageId": "043d3fc1-444c-42ec-9211-c46ceee964f8",
+      "key": "uploads/043d3fc1-444c-42ec-9211-c46ceee964f8/frame-120.png"
+    },
+    "8fh20v/frame-240.png": {
+      "bytes": 466889,
+      "etag": "\"ca270542797a9241425f8f5b90969617\"",
+      "imageId": "3f2995b9-b743-4a08-a424-08780277d763",
+      "key": "uploads/3f2995b9-b743-4a08-a424-08780277d763/frame-240.png"
+    },
+    "av01hv/circle.png": {
+      "bytes": 2436969,
+      "etag": "\"91c5cd4dc82c607c5b6a6bee22226d4c\"",
+      "imageId": "3a53dc07-0b5e-4f2a-87a0-305f9e96bdf2",
+      "key": "uploads/3a53dc07-0b5e-4f2a-87a0-305f9e96bdf2/circle.png"
+    },
+    "av01hv/flatten-left.png": {
+      "bytes": 971083,
+      "etag": "\"ddc095ebaa67abd96db3b930944a6119\"",
+      "imageId": "1e8c6904-2768-48a3-b53e-4e26bf0bfda4",
+      "key": "uploads/1e8c6904-2768-48a3-b53e-4e26bf0bfda4/flatten-left.png"
+    },
+    "av01hv/flatten-right.png": {
+      "bytes": 923617,
+      "etag": "\"a7a0db9e118765e45e83ec6923b77d0b\"",
+      "imageId": "4aa4d0a1-1c71-401f-9220-04b12e67f578",
+      "key": "uploads/4aa4d0a1-1c71-401f-9220-04b12e67f578/flatten-right.png"
+    },
+    "av01hv/frame-0.png": {
+      "bytes": 343650,
+      "etag": "\"90cfcfd3de42582ffc1c9db540a1cdf9\"",
+      "imageId": "981222e0-ef20-449a-8757-f026c1484925",
+      "key": "uploads/981222e0-ef20-449a-8757-f026c1484925/frame-0.png"
+    },
+    "av01hv/frame-120.png": {
+      "bytes": 338795,
+      "etag": "\"7dcdca00d1734a3a175ee72b2b1d4e6d\"",
+      "imageId": "c645e25a-f374-4312-934a-11568388af23",
+      "key": "uploads/c645e25a-f374-4312-934a-11568388af23/frame-120.png"
+    },
+    "av01hv/frame-240.png": {
+      "bytes": 337012,
+      "etag": "\"e2ca5a9c64b1b1ef5a86aa09a7b2959c\"",
+      "imageId": "a874635d-b8b6-40db-bd5b-b5b91584740c",
+      "key": "uploads/a874635d-b8b6-40db-bd5b-b5b91584740c/frame-240.png"
+    },
+    "circle.png": {
+      "bytes": 2198515,
+      "etag": "\"704b49ddbb010043968d3a4e0f92c50b\"",
+      "imageId": "c783d2f3-4de2-4eb0-8939-f10f3f42f307",
+      "key": "uploads/c783d2f3-4de2-4eb0-8939-f10f3f42f307/circle.png"
+    },
+    "y929rh/circle.png": {
+      "bytes": 2695098,
+      "etag": "\"6f2633534325c130ed852fe771398826\"",
+      "imageId": "cb7410db-00a5-483a-9558-4923caf134c4",
+      "key": "uploads/cb7410db-00a5-483a-9558-4923caf134c4/circle.png"
+    },
+    "y929rh/flatten-left.png": {
+      "bytes": 971083,
+      "etag": "\"ddc095ebaa67abd96db3b930944a6119\"",
+      "imageId": "35122f6f-5fc9-4c26-850b-b87897769652",
+      "key": "uploads/35122f6f-5fc9-4c26-850b-b87897769652/flatten-left.png"
+    },
+    "y929rh/flatten-right.png": {
+      "bytes": 923617,
+      "etag": "\"a7a0db9e118765e45e83ec6923b77d0b\"",
+      "imageId": "003297ce-dd0b-4a2b-95c8-6805dfd2a082",
+      "key": "uploads/003297ce-dd0b-4a2b-95c8-6805dfd2a082/flatten-right.png"
+    },
+    "y929rh/frame-0.png": {
+      "bytes": 467177,
+      "etag": "\"83d45c7743e4ce24c204e75eda153246\"",
+      "imageId": "0c3c9ead-1d6c-470b-8d97-a918dc1ab336",
+      "key": "uploads/0c3c9ead-1d6c-470b-8d97-a918dc1ab336/frame-0.png"
+    },
+    "y929rh/frame-120.png": {
+      "bytes": 463343,
+      "etag": "\"75d2b92f9794e1618b028677f95e4a6c\"",
+      "imageId": "07eeab95-6bbf-478e-a088-18637e815d09",
+      "key": "uploads/07eeab95-6bbf-478e-a088-18637e815d09/frame-120.png"
+    },
+    "y929rh/frame-240.png": {
+      "bytes": 467144,
+      "etag": "\"00563bf62d96d3ad52ddea11c77f8bad\"",
+      "imageId": "d536ab16-98b1-4eaa-820c-3f25e48c064e",
+      "key": "uploads/d536ab16-98b1-4eaa-820c-3f25e48c064e/frame-240.png"
+    }
+  },
+  "source": "assets/mock-tyres/release",
+  "uploadedVia": "https://g47l98hx5f.execute-api.ap-southeast-1.amazonaws.com/api/v1/uploads/images"
+}

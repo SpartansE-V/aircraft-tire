@@ -12,6 +12,7 @@ locals {
   app_environment = [
     { name = "PORT", value = "8000" },
     { name = "CORS_ORIGINS", value = var.cors_origins },
+    { name = "UPLOAD_BUCKET", value = local.uploads_bucket },
   ]
 
   app_service_environment = var.openai_api_key != "" ? concat(
