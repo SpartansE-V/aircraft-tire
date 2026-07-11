@@ -5,6 +5,7 @@ import {
   DefectsCard, EventsCard, IdentityCard, PressureCard, RunwayCard, TaxiCard, TouchdownCard, TreadCard, UtilizationCard, WeatherCard,
 } from './TireCards'
 import { Card, Header, Kpi, Open, STATUS, useTheme } from './ui'
+import RemainingLifeCard from './rul/RemainingLifeCard'
 
 export default function Tyres() {
   const [id, setId] = useState('L1')
@@ -43,8 +44,10 @@ export default function Tyres() {
           </div>
         </div>
 
-        {/* right: TPMS + touchdown */}
+        {/* right: remaining life (live RUL) + TPMS + touchdown */}
         <div className="flex flex-col gap-3 lg:col-span-3">
+          <RemainingLifeCard tire={tire} />
+
           <PressureCard tire={tire} />
 
           <TouchdownCard tire={tire} />

@@ -1,0 +1,13 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "cwd": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "env": { "VITE_API_PROXY": "http://localhost:8000" },
+      "port": 5173
+    }
+  ]
+}
