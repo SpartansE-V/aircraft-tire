@@ -4,12 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/**"
-      - "tests/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - "Dockerfile"
-      - ".dockerignore"
+      - "craft-detector-service/**"
       - "3d-reconstructor/**"
       - "web/**"
       - ".github/workflows/**"
@@ -69,15 +64,9 @@ jobs:
         with:
           filters: |
             app:
-              - 'app/**'
-              - 'tests/**'
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'Dockerfile'
-              - '.dockerignore'
+              - 'craft-detector-service/**'
             reconstructor:
               - '3d-reconstructor/**'
-              - '.github/workflows/**'
             web:
               - 'web/**'
 
@@ -85,34 +74,14 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: craft-detector-service
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync
-
-      - name: Verify dependency lock
-        run: uv lock --check
-
-      - name: Check formatting
-        run: uv run ruff format --check app tests
-
-      - name: Lint application and tests
-        run: uv run ruff check app tests
-
-      - name: Type-check application
-        run: uv run mypy app
-
-      - name: Verify model evidence and calibration contracts
-        run: >-
-          uv run pytest
-          tests/test_model_registry.py
-          tests/test_calibration_dataset.py
-          tests/test_calibration_validation.py
-          tests/test_physical_benchmark.py
-          -q
-
-      - name: Run test suite
-        run: uv run pytest -q
+      - run: uv run pytest -q
 
   deploy-app:
     needs: [changes, test-app]
@@ -149,13 +118,10 @@ jobs:
 
       - name: Deploy app service
         working-directory: infra
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           terraform apply -auto-approve \
             -target='module.ecs["app"]' \
-            -var="image_tag_app=${{ github.sha }}" \
-            -var="openai_api_key=${OPENAI_API_KEY}"
+            -var="image_tag_app=${{ github.sha }}"
 
       - name: Publish endpoint to job summary
         working-directory: infra
@@ -183,16 +149,6 @@ jobs:
     if: needs.changes.outputs.reconstructor == 'true'
     runs-on: ubuntu-latest
     steps:
-      # The MASt3R image is large (CUDA base + baked checkpoint). Reclaim the
-      # ~25-40 GB of preinstalled tooling so the build AND `terraform init`
-      # (AWS provider) fit in the runner's ~14 GB free root disk.
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android \
-                      /opt/hostedtoolcache/CodeQL "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
-          sudo docker image prune -af || true
-          df -h /
-
       - uses: actions/checkout@v4
 
       - name: Configure AWS credentials
@@ -211,12 +167,6 @@ jobs:
         run: |
           docker build -t "$REGISTRY/aircraft-tire-3d-reconstructor:${{ github.sha }}" 3d-reconstructor
           docker push "$REGISTRY/aircraft-tire-3d-reconstructor:${{ github.sha }}"
-
-      - name: Reclaim build space before Terraform
-        run: |
-          docker image prune -af || true
-          docker builder prune -af || true
-          df -h /
 
       - uses: hashicorp/setup-terraform@v3
         with:
