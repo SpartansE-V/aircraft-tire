@@ -121,6 +121,12 @@ jobs:
             -target='module.ecs["app"]' \
             -var="image_tag_app=${{ github.sha }}"
 
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### app deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -json alb_dns_names | jq -r '.app')" >> "$GITHUB_STEP_SUMMARY"
+
   test-reconstructor:
     needs: changes
     if: needs.changes.outputs.reconstructor == 'true'
@@ -174,6 +180,12 @@ jobs:
           terraform apply -auto-approve \
             -target='module.ecs["reconstructor"]' \
             -var="image_tag_reconstructor=${{ github.sha }}"
+
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### reconstructor deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -json alb_dns_names | jq -r '.reconstructor')" >> "$GITHUB_STEP_SUMMARY"
 
   test-web:
     needs: changes
@@ -231,3 +243,9 @@ jobs:
           terraform apply -auto-approve \
             -target='module.ecs["web"]' \
             -var="image_tag_web=${{ github.sha }}"
+
+      - name: Publish endpoint to job summary
+        working-directory: infra
+        run: |
+          echo "### web deployed :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "Public endpoint: $(terraform output -json alb_dns_names | jq -r '.web')" >> "$GITHUB_STEP_SUMMARY"
