@@ -16,6 +16,12 @@ export function IdentityCard({ tire }: { tire: Tire }) {
         <Field k="OCR confidence" v={`${(tire.ocrConfidence * 100).toFixed(0)} %`} warn={tire.ocrConfidence < 0.85} />
         <Field k="Retread stamps" v={`R${tire.retreads} / 3 max`} warn={tire.retreads >= 3} />
         <Field k="Part / size" v={`${tire.partNo} · ${tire.size}`} />
+        <Field k="Model type" v={tire.modelType.replaceAll('_', ' ').toUpperCase()} />
+        <Field
+          k="Scan status"
+          v={tire.scanStatus.toUpperCase()}
+          warn={tire.scanStatus !== 'healthy'}
+        />
         <Field k="Flight-log join" v={tire.joinKey.toUpperCase()} warn={tire.joinKey === 'inferred'} />
       </div>
       <Open>Black rubber and vulcanization hairs cap OCR confidence — the serial is the only true key</Open>
@@ -157,14 +163,35 @@ export function EventsCard({ tire }: { tire: Tire }) {
 }
 
 export function TreadCard({ tire }: { tire: Tire }) {
+  const bands = tire.treadDepths
   return (
-    <Card title="Tread depth" tag="Laser triangulation">
-      <RowBars unit=" mm" max={10} limit={tire.grooveLimit} rows={tire.grooves.map((g, i) => ({ label: `Groove ${i + 1}`, value: g }))} />
+    <Card title="Tread depth" tag={`${tire.modelType} · ${bands?.length ?? tire.grooves.length} grooves`}>
+      {bands?.length ? (
+        <div className="space-y-1.5">
+          {bands.map((band, i) => {
+            const worn = band === '1-2mm' || band === '2-3mm'
+            const shallow = band === '3-4mm'
+            return (
+              <div key={`${band}-${i}`} className="flex items-center justify-between border border-[var(--line)] px-2 py-1.5">
+                <span className="text-[10px] uppercase tracking-widest text-[var(--ink-3)]">Groove {i + 1}</span>
+                <span
+                  className="text-xs tabular-nums"
+                  style={{ color: worn ? 'var(--crit)' : shallow ? 'var(--warn)' : 'var(--ink)' }}
+                >
+                  {band}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <RowBars unit=" mm" max={10} limit={tire.grooveLimit} rows={tire.grooves.map((g, i) => ({ label: `Groove ${i + 1}`, value: g }))} />
+      )}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Mini label="Scan error" value={`± ${tire.scanErrorMm} mm`} bad={tire.scanErrorMm > 0.2} />
         <Mini label="Calibrated" value={`${tire.calibratedDaysAgo} d ago`} bad={tire.calibratedDaysAgo > 30} />
       </div>
-      <Open>Absolute error has to hold under 0.20 mm — above that the wear curve decides removal, not the tire</Open>
+      <Open>Bands: healthy 4–6 mm · warning 3–4 mm · error 1–3 mm (or any crack)</Open>
     </Card>
   )
 }

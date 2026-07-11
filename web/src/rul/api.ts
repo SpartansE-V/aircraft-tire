@@ -231,3 +231,111 @@ export function useWheelStatus(
     staleTime: 60_000,
   })
 }
+
+// --- /tyres dashboard: fleet tires with scan status + 3D defects ---
+
+export type ScanStatus = 'healthy' | 'warning' | 'error'
+export type TireModelType = 'radial' | 'type_vii' | 'type_iii'
+
+export type TireDefect3D = {
+  kind: 'wear' | 'damage'
+  label: string
+  severity: 'low' | 'med' | 'high'
+  zone: string
+  category?: string | null
+  source?: string | null
+  angle_rad?: number | null
+  lateral_pct?: number | null
+  at: [number, number, number] | number[]
+  r: number
+  wave?: boolean
+}
+
+export type ScanAnnotation2D = {
+  category: 'crack' | 'tread-shallow'
+  label: string | null
+  bbox: number[]
+  center: { x: number; y: number }
+  segmentation: number[][]
+}
+
+export type AnnotatedScanImage = {
+  url: string
+  width: number
+  height: number
+  annotations: ScanAnnotation2D[]
+}
+
+export type FleetTireItem = {
+  tire_id: string
+  aircraft_id: string
+  tail_number: string
+  position: WheelPosition
+  gear: 'nose' | 'main'
+  brand: string
+  serial: string
+  tire_size: string
+  retread_level: number
+  new_tread_mm: number
+  wear_limit_mm: number
+  time_to_event_cycles: number
+  measured_groove_mm: number | null
+  pressure_pct: number | null
+  model_type: TireModelType
+  scan_status: ScanStatus
+  scan_group: string
+  scan_side: 'left' | 'right'
+  tread_depths: Array<'1-2mm' | '2-3mm' | '3-4mm' | '4-5mm' | '5-6mm'>
+  defects: TireDefect3D[]
+  images: {
+    circle: AnnotatedScanImage
+    flatten: AnnotatedScanImage
+    frames: AnnotatedScanImage[]
+  }
+}
+
+export type FleetAircraftItem = {
+  tail_number: string
+  aircraft_id: string
+  aircraft_type: string
+  home_station: string
+  cycles_per_day: number
+}
+
+export type FleetAircraftListResponse = { aircraft: FleetAircraftItem[] }
+
+export type FleetTiresResponse = {
+  tail_number: string
+  aircraft_id: string
+  aircraft_type: string
+  home_station: string
+  tires: FleetTireItem[]
+}
+
+export function fetchFleetAircraft(): Promise<FleetAircraftListResponse> {
+  return request<FleetAircraftListResponse>('/api/v1/tire_rul/fleet/aircraft')
+}
+
+export function fetchFleetTires(tail: string): Promise<FleetTiresResponse> {
+  const q = new URLSearchParams({ tail })
+  return request<FleetTiresResponse>(`/api/v1/tire_rul/fleet/tires?${q}`)
+}
+
+export function useFleetAircraft(): UseQueryResult<FleetAircraftListResponse, ApiError> {
+  return useQuery({
+    queryKey: ['fleet-aircraft'],
+    queryFn: fetchFleetAircraft,
+    retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
+    staleTime: 60_000,
+  })
+}
+
+export function useFleetTires(tail: string | null): UseQueryResult<FleetTiresResponse, ApiError> {
+  return useQuery({
+    queryKey: ['fleet-tires', tail],
+    queryFn: () => fetchFleetTires(tail as string),
+    enabled: tail !== null,
+    retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
+    staleTime: 60_000,
+  })
+}

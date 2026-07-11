@@ -10,6 +10,8 @@ from app.domain.schemas import (
     MAX_WORKLIST_TOP_N,
     AgentChatRequest,
     AgentChatResponse,
+    FleetAircraftListResponse,
+    FleetTiresResponse,
     FleetWorklistResponse,
     TireRulPredictionRequest,
     TireRulPredictionResponse,
@@ -20,6 +22,7 @@ from app.services.agent_service import (
     AgentDataUnavailableError,
     agent_service,
 )
+from app.services.fleet_tires_service import fleet_tires_service
 from app.services.tire_rul_service import tire_rul_service
 
 # RUL stands for Remaining Useful Life
@@ -144,3 +147,46 @@ def wheel_status(
         )
         return JSONResponse(status_code=404, content=payload.model_dump(exclude_none=True))
     return status
+
+
+@router.get(
+    "/fleet/aircraft",
+    response_model=FleetAircraftListResponse,
+    summary="List fleet aircraft tails",
+    description="Aircraft available for the /tyres dashboard (from aircraft.parquet).",
+    responses=_FLEET_UNAVAILABLE,
+)
+def fleet_aircraft() -> FleetAircraftListResponse | JSONResponse:
+    try:
+        return fleet_tires_service.list_aircraft()
+    except AgentDataUnavailableError as exc:
+        return _fleet_unavailable_response(exc)
+
+
+@router.get(
+    "/fleet/tires",
+    response_model=FleetTiresResponse,
+    summary="Current tires for one aircraft (scan status + 3D defects)",
+    description=(
+        "Currently-mounted tires for a tail: construction model_type, scan_status "
+        "(healthy / warning / error from crack & tread-shallow annotations), linked "
+        "mock-tyre frame images, and 3D defect overlays for the /tyres viewer."
+    ),
+    responses={
+        404: {"model": ErrorResponse, "description": "Unknown tail number."},
+        **_FLEET_UNAVAILABLE,
+    },
+)
+def fleet_tires(
+    tail: str = Query(max_length=16, description="Aircraft tail number, e.g. VN-A300"),
+) -> FleetTiresResponse | JSONResponse:
+    try:
+        payload = fleet_tires_service.tires_for_tail(tail)
+    except AgentDataUnavailableError as exc:
+        return _fleet_unavailable_response(exc)
+    if payload is None:
+        body = ErrorResponse(
+            error=ErrorBody(code="AIRCRAFT_NOT_FOUND", message=f"No aircraft with tail '{tail}'.")
+        )
+        return JSONResponse(status_code=404, content=body.model_dump(exclude_none=True))
+    return payload

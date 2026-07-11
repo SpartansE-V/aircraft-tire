@@ -5,10 +5,17 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+
+# The AI backends use their SDKs' standard environment-variable configuration. Load the
+# application development file before the application imports those backends; existing
+# deployment environment variables retain precedence.
+load_dotenv(ENV_PATH)
 
 
 class RoboflowModelSettings(BaseModel):
@@ -61,7 +68,7 @@ class Settings(BaseSettings):
     """Runtime settings loaded from config.yaml, environment variables, or a local .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_PATH,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

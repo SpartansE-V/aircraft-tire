@@ -36,6 +36,7 @@ ai = [
     "pillow>=10.0",
     "openai>=1.30",
     "anthropic[bedrock]>=0.40",
+    "boto3>=1.34,<2",
 ]
 
 [dependency-groups]
@@ -53,11 +54,9 @@ dev = [
 [tool.uv]
 package = false
 
-[tool.pytest.ini_options]
-addopts = "-ra"
-asyncio_mode = "auto"
-pythonpath = ["."]
-testpaths = ["tests"]
+# NOTE: pytest config lives in the repo-root pytest.ini, not here. The test suite is at
+# <repo>/tests and imports the repo-root `app` package, so pytest's rootdir must be the repo
+# root. A [tool.pytest.ini_options] block here would make app/ the rootdir and shadow that.
 
 [tool.ruff]
 line-length = 100
