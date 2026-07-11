@@ -36,6 +36,12 @@ RUN git clone --recursive https://github.com/naver/mast3r.git ${MAST3R_HOME} && 
         -r ${MAST3R_HOME}/requirements.txt \
         pillow-heif
 
+# scipy >= 1.14 removed the `scipy.cluster.hierarchy.distance` re-export that
+# MASt3R's sparse_ga (hclust-ward) relies on. Repoint it at the stable
+# scipy.spatial.distance.squareform so clustering works on current scipy.
+RUN sed -i 's|sch\.distance\.squareform|__import__("scipy.spatial.distance", fromlist=["squareform"]).squareform|g' \
+    ${MAST3R_HOME}/mast3r/cloud_opt/sparse_ga.py
+
 # Pre-download the metric checkpoint (baked in -> fast, offline Fargate cold starts).
 RUN mkdir -p ${MAST3R_HOME}/checkpoints && \
     wget -q https://download.europe.naverlabs.com/ComputerVision/MASt3R/MASt3R_ViTLarge_BaseDecoder_512_catmlpdpt_metric.pth \
