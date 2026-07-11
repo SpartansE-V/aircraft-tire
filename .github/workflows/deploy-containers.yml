@@ -86,7 +86,9 @@ jobs:
 
   deploy-app:
     needs: [changes, test-app]
-    if: needs.changes.outputs.app == 'true'
+    if: |
+      needs.changes.outputs.app == 'true' &&
+      (success() || failure())
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
