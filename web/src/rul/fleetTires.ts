@@ -6,14 +6,15 @@ import type { FleetTireItem, FleetTiresResponse, WheelPosition } from './api'
 
 const POS_META: Record<
   WheelPosition,
-  { id: string; gear: Tire['gear']; role: Tire['role'] }
+  { id: string; gear: Tire['gear']; role: Tire['role']; axle: Tire['axle'] }
 > = {
-  nlg_l: { id: 'N1', gear: 'nose', role: 'nose' },
-  nlg_r: { id: 'N2', gear: 'nose', role: 'nose' },
-  mlg_l_outbd: { id: 'L1', gear: 'left', role: 'outer' },
-  mlg_l_inbd: { id: 'L2', gear: 'left', role: 'inner' },
-  mlg_r_inbd: { id: 'R1', gear: 'right', role: 'inner' },
-  mlg_r_outbd: { id: 'R2', gear: 'right', role: 'outer' },
+  nlg_l: { id: 'N1', gear: 'nose', role: 'nose', axle: 0 },
+  nlg_r: { id: 'N2', gear: 'nose', role: 'nose', axle: 0 },
+  // A320 MLG is a dual-wheel axle — both ribs share axle 0.
+  mlg_l_outbd: { id: 'L1', gear: 'left', role: 'outer', axle: 0 },
+  mlg_l_inbd: { id: 'L2', gear: 'left', role: 'inner', axle: 0 },
+  mlg_r_inbd: { id: 'R1', gear: 'right', role: 'inner', axle: 0 },
+  mlg_r_outbd: { id: 'R2', gear: 'right', role: 'outer', axle: 0 },
 }
 
 const BAND_MM: Record<TreadDepthBand, number> = {
@@ -41,13 +42,20 @@ function toDefects(item: FleetTireItem): Defect[] {
   }))
 }
 
+function stableClockDeg(seed: string): number {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return h % 360
+}
+
 /** Build dashboard tires from one aircraft's current mounted tires. */
 export function fleetTiresToDashboard(fleet: FleetTiresResponse): Tire[] {
   return fleet.tires.map((item) => {
     const meta = POS_META[item.position]
     const treadDepths = item.tread_depths as TreadDepthBand[]
     const grooves = treadDepths.map((b) => BAND_MM[b])
-    const psiTarget = item.gear === 'nose' ? 185 : 215
+    const nose = meta.gear === 'nose'
+    const psiTarget = nose ? 185 : 215
     const pressurePct = item.pressure_pct ?? 100
     const psi = +(psiTarget * (pressurePct / 100)).toFixed(1)
     return {
@@ -55,6 +63,10 @@ export function fleetTiresToDashboard(fleet: FleetTiresResponse): Tire[] {
       label: POSITION_LABEL[item.position],
       gear: meta.gear,
       role: meta.role,
+      axle: meta.axle,
+      ratedLoadKN: nose ? 175 : 265,
+      radiusM: nose ? 0.508 : 0.584,
+      clockDeg: stableClockDeg(item.tire_id || item.serial || meta.id),
       serial: item.serial,
       ocrConfidence: 0.92,
       retreads: item.retread_level,
