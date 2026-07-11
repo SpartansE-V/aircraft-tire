@@ -2,6 +2,11 @@ variable "project_name" {
   type = string
 }
 
+variable "bucket_name" {
+  description = "Globally unique name of the uploads bucket."
+  type        = string
+}
+
 variable "cors_allowed_origins" {
   description = "Origins allowed to PUT/POST images directly to the bucket (e.g. browser multipart uploads)."
   type        = list(string)

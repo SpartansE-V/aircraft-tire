@@ -42,6 +42,20 @@ jobs:
         working-directory: infra
         run: terraform init
 
+      # IAM policy updates are eventually consistent. Apply deploy-role changes
+      # first, then assume the role again before using newly added permissions.
+      - name: Bootstrap deploy role permissions
+        working-directory: infra
+        run: |
+          terraform apply -auto-approve \
+            -target=module.github_oidc.aws_iam_role_policy.github_actions_deploy
+
+      - name: Refresh AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
       # Infra-only changes must not touch what's currently deployed, so we
       # re-pass the image tags already running instead of falling back to
       # each variable's "latest" default (which was never pushed - the ECR
