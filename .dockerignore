@@ -1,6 +1,6 @@
-# Build context is the whole repo, but the API image only needs pyproject/uv.lock,
-# app/, config/, and artifacts/mixedlm_covariance.pkl (see Dockerfile). Everything
-# below is excluded to keep the context small.
+# Build context is the whole repo, but the API image only needs pyproject/uv.lock
+# and app/ — which now carries config/ and artifacts/mixedlm_covariance.pkl inside
+# app/tire_rul/ (see Dockerfile). Everything below is excluded to keep the context small.
 
 # VCS / caches / envs
 .git
@@ -31,10 +31,11 @@ README.md
 tests
 
 # Synthetic training data and heavy research artifacts — not needed to serve the API.
-# The Dockerfile copies only artifacts/mixedlm_covariance.pkl (the fitted prior).
-data
-artifacts/mixedlm.pkl
-artifacts/lightgbm.txt
-artifacts/weibull_aft.pkl
-artifacts/shap_values.parquet
-artifacts/eval_report.json
+# Everything under app/tire_rul is pulled in by `COPY app ./app`, so the heavy inputs are
+# excluded here; only app/tire_rul/artifacts/mixedlm_covariance.pkl (the fitted prior) survives.
+app/tire_rul/data
+app/tire_rul/artifacts/mixedlm.pkl
+app/tire_rul/artifacts/lightgbm.txt
+app/tire_rul/artifacts/weibull_aft.pkl
+app/tire_rul/artifacts/shap_values.parquet
+app/tire_rul/artifacts/eval_report.json

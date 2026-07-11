@@ -22,11 +22,10 @@ COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
+# app/ carries the code plus the RUL endpoint's runtime inputs — scoring thresholds
+# (app/tire_rul/config/) and the fitted population prior (app/tire_rul/artifacts/mixedlm_covariance.pkl,
+# 386 B). Training data and heavy research artifacts are excluded via .dockerignore.
 COPY app ./app
-# Runtime inputs for the RUL AI endpoint: scoring thresholds + the fitted population prior
-# (386 B). Training data and heavy research artifacts are excluded via .dockerignore.
-COPY config ./config
-COPY artifacts/mixedlm_covariance.pkl ./artifacts/mixedlm_covariance.pkl
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app

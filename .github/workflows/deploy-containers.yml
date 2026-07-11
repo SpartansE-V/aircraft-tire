@@ -6,8 +6,6 @@ on:
     paths:
       - "app/**"
       - "tests/**"
-      - "config/**"
-      - "artifacts/mixedlm_covariance.pkl"
       - "pyproject.toml"
       - "uv.lock"
       - "Dockerfile"
@@ -72,8 +70,6 @@ jobs:
             app:
               - 'app/**'
               - 'tests/**'
-              - 'config/**'
-              - 'artifacts/mixedlm_covariance.pkl'
               - 'pyproject.toml'
               - 'uv.lock'
               - 'Dockerfile'
