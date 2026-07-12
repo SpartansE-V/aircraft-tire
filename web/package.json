@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "check:sim": "node --experimental-strip-types --no-warnings src/sim.check.ts",
-    "check:landing-engine": "node --experimental-strip-types --no-warnings src/landingEngine.check.ts"
+    "check:landing-engine": "node --experimental-strip-types --no-warnings src/landingEngine.check.ts",
+    "check:assessment": "node --experimental-strip-types --no-warnings src/assessment.check.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.2",

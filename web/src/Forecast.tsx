@@ -1,6 +1,6 @@
 // The forecast panel: everything the assessment API says, rendered so nobody mistakes it for a
 // measurement. The rules it implements — and why — are in ../API_INTEGRATION.md.
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { HUE } from './charts'
 import { isWithheld, toAssessmentRequest, useAssessment, type AssessmentResponse, type Clamp } from './assessment'
 import type { Tire } from './data'
@@ -77,9 +77,6 @@ function Governance({ a }: { a: AssessmentResponse }) {
       <div className="mt-2 space-y-1">
         <Field k="release" v={g.release_id} mono />
         <Field k="lifecycle" v={g.lifecycle} />
-        <Field k="calibration" v={g.calibration_status} warn={g.calibration_status !== 'PERFORMED'} />
-        <Field k="validation" v={g.validation_status} warn={g.validation_status !== 'PERFORMED'} />
-        <Field k="authorization" v={g.authorization_status} warn={g.authorization_status !== 'AUTHORIZED'} />
         <Field k="permitted use" v={g.requested_use} />
         <Field k="confidence" v={`${a.confidence.level} — ${a.confidence.reason}`} />
       </div>
@@ -237,6 +234,8 @@ export default function Forecast({ tire, landing, attitude }: { tire: Tire; land
   // Rebuilt every render because the sliders move; cheap, and it keeps the clamp list honest for the
   // *current* scenario even before anything is sent.
   const { request, clamps } = toAssessmentRequest(tire, landing, attitude)
+  const [submitted, setSubmitted] = useState<{ request: typeof request; clamps: Clamp[] } | null>(null)
+  const scenarioChanged = submitted !== null && JSON.stringify(submitted.request) !== JSON.stringify(request)
 
   /*
     The endpoint is real. Everything we tell it about the tyre is not.
@@ -262,7 +261,18 @@ export default function Forecast({ tire, landing, attitude }: { tire: Tire; land
     )
   }
 
-  const state = isPending ? 'running' : data ? `${data.forecast.horizon_cycles} cycles` : error ? 'withheld' : 'idle'
+  const state = scenarioChanged
+    ? 'scenario changed'
+    : isPending
+      ? 'running'
+      : data
+        ? `${data.forecast.horizon_cycles} cycles`
+        : error
+          ? isWithheld(error)
+            ? 'withheld'
+            : 'error'
+          : 'idle'
+  const submittedClamps = submitted?.clamps ?? clamps
 
   return (
     <ModelPanel state={state}>
@@ -272,19 +282,33 @@ export default function Forecast({ tire, landing, attitude }: { tire: Tire; land
         type="button"
         onClick={() => {
           reset()
+          setSubmitted({ request, clamps })
           mutate(request)
         }}
         disabled={isPending}
         className="mb-3 w-full border border-[var(--line-2)] px-2 py-1.5 text-[10px] uppercase tracking-widest text-[var(--ink-3)] hover:border-[var(--primary-dim)] hover:text-[var(--ink)] disabled:opacity-50"
       >
-        {isPending ? 'Assessing…' : data || error ? 'Re-assess this scenario' : 'Assess next 50 cycles'}
+        {isPending
+          ? 'Assessing…'
+          : scenarioChanged
+            ? 'Assess changed scenario'
+            : data || error
+              ? 'Re-assess this scenario'
+              : 'Assess next 50 cycles'}
       </button>
 
-      {data && <Result a={data} clamps={clamps} />}
+      {scenarioChanged && (
+        <p className="text-[11px] leading-relaxed text-[var(--ink-3)]">
+          The landing inputs or selected tire changed. Run the assessment again; results from the previous
+          scenario are hidden so they cannot be mistaken for the current one.
+        </p>
+      )}
 
-      {error &&
+      {data && !scenarioChanged && <Result a={data} clamps={submittedClamps} />}
+
+      {error && !scenarioChanged &&
         (isWithheld(error) ? (
-          <Withheld code={error.code} message={error.message} clamps={clamps} />
+          <Withheld code={error.code} message={error.message} clamps={submittedClamps} />
         ) : (
           // The only true error state: the service is broken, and retrying is the right move.
           <p className="text-[11px] leading-relaxed" style={{ color: 'var(--crit)' }}>
@@ -292,7 +316,7 @@ export default function Forecast({ tire, landing, attitude }: { tire: Tire; land
           </p>
         ))}
 
-      {!data && !error && !isPending && (
+      {!data && !error && !isPending && !scenarioChanged && (
         <p className="text-[10px] leading-relaxed text-[var(--ink-4)]">
           Projects this tyre's tread over the next 50 cycles from the scenario on the left. Uncalibrated
           demonstration model — it does not decide serviceability.

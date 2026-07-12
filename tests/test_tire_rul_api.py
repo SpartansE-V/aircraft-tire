@@ -343,3 +343,20 @@ async def test_enrich_fleet_scans_surfaces_missing_assets(
     assert body["code"] == "FLEET_DATA_UNAVAILABLE"
     assert "Mock-tyre scan packs missing" in body["message"]
     assert "make data" not in body["message"]
+
+
+@pytest.mark.asyncio
+async def test_enrich_fleet_scans_surfaces_missing_ai_stack(
+    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing_ai(*, seed: int = 20260712) -> Any:
+        raise ImportError("No module named 'pandas'")
+
+    monkeypatch.setattr("app.api.routes.tire_rul.enrich_tires", missing_ai)
+    response = await client.post("/api/v1/tire_rul/fleet/enrich-scans")
+
+    assert response.status_code == 503
+    body = response.json()["error"]
+    assert body["code"] == "FLEET_DATA_UNAVAILABLE"
+    assert "uv sync --extra ai" in body["message"]
