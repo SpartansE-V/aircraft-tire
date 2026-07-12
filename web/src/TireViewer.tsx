@@ -11,6 +11,9 @@ type Mode = 'solid' | 'wireframe'
 // SEV_INK is the themed text variant — the mark hues fall under 4.5:1 on the light surface.
 const SEV_COLOR = { low: HUE.warn, med: HUE.warn, high: HUE.crit }
 const SEV_INK = { low: 'var(--warn)', med: 'var(--warn)', high: 'var(--crit)' }
+/** Selected crack — cyan so it reads apart from severity reds on both 2D and 3D. */
+const SELECTED_COLOR = 0x22d3ee
+const SELECTED_HEX = '#22d3ee'
 
 // The GLB ships a plain domed hub. Build a vented aircraft rim instead: white face plate
 // with radial vent slots, bolt ring, dark hub bore. Sized to the tire's bore (r=0.475) and
@@ -166,6 +169,8 @@ export default function TireViewer({
   impact,
   compact = false,
   modelType = 'radial',
+  selectedLabel = null,
+  onSelectCrack,
 }: {
   defects: Defect[]
   serial: string
@@ -176,6 +181,9 @@ export default function TireViewer({
   compact?: boolean
   /** Construction type from the database — one GLB per wheel, no type switcher. */
   modelType?: TireModelTypeId
+  /** Defect.label of the crack highlighted on both 2D and 3D views. */
+  selectedLabel?: string | null
+  onSelectCrack?: (label: string | null) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const overlay = useRef<HTMLDivElement>(null)
@@ -188,6 +196,10 @@ export default function TireViewer({
   // to the render loop through a ref instead of putting it in the effect's dependencies.
   const impactRef = useRef(impact)
   impactRef.current = impact
+  const selectedRef = useRef(selectedLabel)
+  selectedRef.current = selectedLabel
+  const onSelectRef = useRef(onSelectCrack)
+  onSelectRef.current = onSelectCrack
 
   useEffect(() => {
     setError(null)
@@ -221,6 +233,33 @@ export default function TireViewer({
     let live: THREE.Mesh | null = null
     let peak: THREE.Mesh | null = null
     let flat: THREE.Mesh | null = null
+    // Pulsing point marker at the selected crack centre (2D polygon ↔ this point).
+    const selectPoint = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 20, 16),
+      new THREE.MeshBasicMaterial({
+        color: SELECTED_COLOR,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: false,
+      }),
+    )
+    selectPoint.visible = false
+    selectPoint.renderOrder = 10
+    const selectHalo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 20, 16),
+      new THREE.MeshBasicMaterial({
+        color: SELECTED_COLOR,
+        transparent: true,
+        opacity: 0.28,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    )
+    selectHalo.visible = false
+    selectHalo.renderOrder = 9
+    const selectGroup = new THREE.Group()
+    selectGroup.add(selectHalo, selectPoint)
+    selectGroup.visible = false
 
     new GLTFLoader().load(
       tt.model,
@@ -294,7 +333,7 @@ export default function TireViewer({
         // The flat spot is not contact, it is damage — so it gets the damage colour and sits flush on
         // the tread rather than glowing above it. Rubber that is no longer there.
         flat = treadBand(radius * 1.001, width * 0.99, 1, 0.95, FLAT_HUE, false)
-        tire.add(peak, live, flat)
+        tire.add(peak, live, flat, selectGroup)
 
         setWireframe.current = (w) => {
           mat.wireframe = w
@@ -302,12 +341,33 @@ export default function TireViewer({
         setWireframe.current(mode === 'wireframe')
 
         // Wave pulse: expand/contract crack highlight radius via vertex colour intensity.
+        // Selected crack: cyan point marker + local tint; peers dim so the 2D polygon link is clear.
         const waveClock = new THREE.Clock()
         const paintWave = () => {
-          if (!defects.some((d) => d.wave !== false && d.kind === 'damage')) return
           const t = waveClock.getElapsedTime()
           const pulse = 0.55 + 0.45 * Math.sin(t * 3.2)
+          const selected = selectedRef.current
           const warm = new THREE.Color()
+
+          // Drive the 3D selection point from the shared label (set by 2D polygon click too).
+          const sel = selected ? defects.find((d) => d.label === selected) : undefined
+          if (sel) {
+            selectGroup.visible = true
+            selectPoint.visible = true
+            selectHalo.visible = true
+            selectGroup.position.set(...sel.at)
+            const s = 0.85 + 0.35 * pulse
+            selectPoint.scale.setScalar(s)
+            selectHalo.scale.setScalar(0.9 + 0.55 * pulse)
+            ;(selectPoint.material as THREE.MeshBasicMaterial).opacity = 0.75 + 0.25 * pulse
+            controls.autoRotate = false
+          } else {
+            selectGroup.visible = false
+            controls.autoRotate = true
+          }
+
+          if (!defects.some((d) => d.wave !== false && d.kind === 'damage')) return
+
           for (let i = 0; i < pos.count; i++) {
             const di = hitIdx[i]
             if (di < 0) {
@@ -318,18 +378,90 @@ export default function TireViewer({
             }
             const d = defects[di]
             if (d.wave === false) continue
-            warm.set(SEV_COLOR[d.severity])
-            warm.lerp(base, 1 - pulse)
+            const isSelected = selected != null && d.label === selected
+            const dimOthers = selected != null && !isSelected
+            if (isSelected) {
+              // Soft local tint around the point — the sphere is the primary "point" cue.
+              warm.setHex(SELECTED_COLOR)
+              warm.lerp(base, 0.35 + 0.25 * (1 - pulse))
+            } else if (dimOthers) {
+              warm.set(SEV_COLOR[d.severity])
+              warm.lerp(base, 0.88)
+            } else {
+              warm.set(SEV_COLOR[d.severity])
+              warm.lerp(base, 1 - pulse)
+            }
             warm.toArray(colors, i * 3)
           }
           const attr = tire.geometry.getAttribute('color') as THREE.BufferAttribute
           attr.needsUpdate = true
         }
-        ;(tire as THREE.Mesh & { __paintWave?: () => void }).__paintWave = paintWave
+        ;(tire as THREE.Mesh & { __paintWave?: () => void; __hitIdx?: Int16Array }).__paintWave = paintWave
+        ;(tire as THREE.Mesh & { __hitIdx?: Int16Array }).__hitIdx = hitIdx
       },
       undefined,
       () => setError(`${tt.model} failed to load`),
     )
+
+    // Click a crack on the mesh (or empty rubber) to sync selection with 2D overlays.
+    // Ignore drags so orbiting the tyre does not clear the selection.
+    const raycaster = new THREE.Raycaster()
+    const pointer = new THREE.Vector2()
+    let downX = 0
+    let downY = 0
+    const onPointerDown = (e: PointerEvent) => {
+      downX = e.clientX
+      downY = e.clientY
+    }
+    const onCanvasClick = (e: MouseEvent) => {
+      if (!onSelectRef.current || !mesh) return
+      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 5) return
+      const rect = renderer.domElement.getBoundingClientRect()
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera(pointer, camera)
+      const hits = raycaster.intersectObject(mesh, false)
+      if (!hits.length) {
+        onSelectRef.current(null)
+        return
+      }
+      // Prefer the defect whose centre is closest to the hit (within its paint radius).
+      const pt = hits[0].point.clone()
+      mesh.worldToLocal(pt)
+      let bestDi = -1
+      let bestDist = Infinity
+      for (let di = 0; di < defects.length; di++) {
+        const d = defects[di]
+        const dist = pt.distanceTo(new THREE.Vector3(...d.at))
+        if (dist < d.r * 1.35 && dist < bestDist) {
+          bestDist = dist
+          bestDi = di
+        }
+      }
+      if (bestDi < 0) {
+        // Fallback: vertex colour map (same radii used when painting).
+        const face = hits[0].face
+        const hitIdx = (mesh as THREE.Mesh & { __hitIdx?: Int16Array }).__hitIdx
+        if (face && hitIdx) {
+          const posAttr = mesh.geometry.attributes.position
+          const tmp = new THREE.Vector3()
+          for (const vi of [face.a, face.b, face.c]) {
+            tmp.fromBufferAttribute(posAttr, vi)
+            const di = hitIdx[vi]
+            if (di < 0) continue
+            const dist = tmp.distanceToSquared(pt)
+            if (dist < bestDist) {
+              bestDist = dist
+              bestDi = di
+            }
+          }
+        }
+      }
+      const label = bestDi >= 0 ? defects[bestDi].label : null
+      onSelectRef.current(label === selectedRef.current ? null : label)
+    }
+    renderer.domElement.addEventListener('pointerdown', onPointerDown)
+    renderer.domElement.addEventListener('click', onCanvasClick)
 
     // Defect callouts: project the zone centres to screen space each frame and drive the
     // HTML markers directly (no React re-render in the animation loop).
@@ -387,6 +519,7 @@ export default function TireViewer({
       if (mesh && overlay.current) {
         camera.getWorldPosition(cam)
         const kids = overlay.current.children as HTMLCollectionOf<HTMLElement>
+        const selected = selectedRef.current
         defects.forEach((d, i) => {
           const node = kids[i]
           if (!node) return
@@ -395,7 +528,11 @@ export default function TireViewer({
           const facing = p.dot(cam) > 0
           p.project(camera)
           node.style.transform = `translate(-50%,-50%) translate(${((p.x + 1) / 2) * el.clientWidth}px, ${((1 - p.y) / 2) * el.clientHeight}px)`
-          node.style.opacity = facing ? '1' : '0.2'
+          const isSelected = selected != null && d.label === selected
+          const dimOthers = selected != null && !isSelected
+          if (isSelected) node.style.opacity = '1'
+          else if (dimOthers) node.style.opacity = facing ? '0.22' : '0.08'
+          else node.style.opacity = facing ? '1' : '0.2'
         })
       }
       raf = requestAnimationFrame(tick)
@@ -412,6 +549,8 @@ export default function TireViewer({
     return () => {
       cancelAnimationFrame(raf)
       window.removeEventListener('resize', onResize)
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown)
+      renderer.domElement.removeEventListener('click', onCanvasClick)
       controls.dispose()
       renderer.dispose()
       el.removeChild(renderer.domElement)
@@ -427,24 +566,44 @@ export default function TireViewer({
 
       {/* projected defect callouts — crack centres drive the wave highlight */}
       <div ref={overlay} className="pointer-events-none absolute inset-0">
-        {defects.map((d) => (
-          <div key={d.label} className="absolute left-0 top-0 flex items-center gap-2 whitespace-nowrap">
-            <span
-              className={`h-2.5 w-2.5 rotate-45 border ${d.wave !== false ? 'animate-pulse' : ''}`}
-              style={{ borderColor: SEV_COLOR[d.severity], background: `${SEV_COLOR[d.severity]}33` }}
-            />
-            <span
-              className="border-l pl-2 text-[10px] uppercase tracking-widest"
-              style={{ borderColor: SEV_COLOR[d.severity], color: SEV_INK[d.severity] }}
+        {defects.map((d) => {
+          const isSelected = selectedLabel != null && d.label === selectedLabel
+          const dimOthers = selectedLabel != null && !isSelected
+          const mark = isSelected ? SELECTED_HEX : SEV_COLOR[d.severity]
+          const ink = isSelected ? SELECTED_HEX : SEV_INK[d.severity]
+          return (
+            <div
+              key={d.label}
+              className={`absolute left-0 top-0 flex items-center gap-2 whitespace-nowrap transition-opacity ${
+                onSelectCrack ? 'pointer-events-auto cursor-pointer' : ''
+              } ${dimOthers ? 'opacity-30' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onSelectCrack?.(isSelected ? null : d.label)
+              }}
             >
-              {d.kind === 'damage' ? '⚠ ' : '≈ '}
-              {d.zone}
-              {d.lateral_pct != null && (
-                <span className="ml-1 text-[var(--ink-4)]">· {d.lateral_pct > 0 ? '+' : ''}{d.lateral_pct.toFixed(0)}%</span>
-              )}
-            </span>
-          </div>
-        ))}
+              <span
+                className={`rotate-45 border ${isSelected ? 'h-3.5 w-3.5' : 'h-2.5 w-2.5'} ${
+                  d.wave !== false || isSelected ? 'animate-pulse' : ''
+                }`}
+                style={{ borderColor: mark, background: `${mark}33`, boxShadow: isSelected ? `0 0 10px ${mark}` : undefined }}
+              />
+              <span
+                className={`border-l pl-2 uppercase tracking-widest ${isSelected ? 'text-[11px] font-semibold' : 'text-[10px]'}`}
+                style={{ borderColor: mark, color: ink }}
+              >
+                {d.kind === 'damage' ? '⚠ ' : '≈ '}
+                {d.zone}
+                {d.source && (
+                  <span className="ml-1 text-[var(--ink-4)]">· {d.source}</span>
+                )}
+                {d.lateral_pct != null && (
+                  <span className="ml-1 text-[var(--ink-4)]">· {d.lateral_pct > 0 ? '+' : ''}{d.lateral_pct.toFixed(0)}%</span>
+                )}
+              </span>
+            </div>
+          )
+        })}
       </div>
 
       <div className="pointer-events-none absolute inset-0 scanline" />
@@ -500,7 +659,8 @@ export default function TireViewer({
       )}
 
       <div className={`absolute bottom-4 left-4 text-[10px] uppercase tracking-widest text-[var(--ink-4)] ${compact ? 'hidden' : ''}`}>
-        3D laser scan · {serial} · {tt.name} · orbit / scroll to inspect
+        3D laser scan · {serial} · {tt.name} · orbit / scroll
+        {onSelectCrack ? ' · click crack (circle or flatten) to link 2D↔3D' : ' to inspect'}
       </div>
 
       {error && <p className="absolute inset-0 flex items-center justify-center text-sm text-[var(--crit)]">{error}</p>}

@@ -80,6 +80,14 @@ def test_healthy_and_warning_tires_use_shared_good_circle():
     assert any(a["category"] == "crack" for a in damaged["circle"]["annotations"])
     assert all(a["label"] is None for a in damaged["circle"]["annotations"] if a["category"] == "crack")
     assert any(a["category"] == "crack" for a in damaged["flatten"]["annotations"])
+    circle_cracks = [a for a in damaged["circle"]["annotations"] if a["category"] == "crack"]
+    flatten_cracks = [a for a in damaged["flatten"]["annotations"] if a["category"] == "crack"]
+    assert all(a["defect_label"] and a["defect_label"].startswith("crack-circle-") for a in circle_cracks)
+    assert all(a["defect_label"] and a["defect_label"].startswith("crack-flatten-left-") for a in flatten_cracks)
+    # 2D defect_label must match extract_cracks() 3D labels for the same pack.
+    left_labels = {d["label"] for d in extract_cracks("1h233b", "left")}
+    assert {a["defect_label"] for a in circle_cracks} <= left_labels
+    assert {a["defect_label"] for a in flatten_cracks} <= left_labels
 
 
 def test_2d_annotations_omit_wheel_and_healthy_tread():

@@ -11,6 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+REPO_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 LOCAL_CORS_ORIGINS = ",".join(
     (
         "http://localhost:3000",
@@ -26,8 +27,9 @@ LOCAL_CORS_ORIGINS = ",".join(
 
 # The AI backends use their SDKs' standard environment-variable configuration. Load the
 # application development file before the application imports those backends; existing
-# deployment environment variables retain precedence.
-load_dotenv(ENV_PATH)
+# deployment environment variables retain precedence. Repo-root .env then app/.env.
+load_dotenv(REPO_ENV_PATH)
+load_dotenv(ENV_PATH, override=True)
 
 
 class RoboflowModelSettings(BaseModel):

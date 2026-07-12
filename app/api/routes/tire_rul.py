@@ -12,6 +12,8 @@ from app.domain.schemas import (
     MAX_WORKLIST_TOP_N,
     AgentChatRequest,
     AgentChatResponse,
+    CircleAnalysisRequest,
+    CircleAnalysisResponse,
     FleetAircraftListResponse,
     FleetTiresResponse,
     FleetWorklistResponse,
@@ -25,6 +27,7 @@ from app.services.agent_service import (
     AgentDataUnavailableError,
     agent_service,
 )
+from app.services.circle_analysis_service import CircleAnalysisError, analyze_circle
 from app.services.fleet_tires_service import fleet_tires_service
 from app.services.tire_rul_service import tire_rul_service
 
@@ -171,6 +174,34 @@ def wheel_status(
         )
         return JSONResponse(status_code=404, content=payload.model_dump(exclude_none=True))
     return status
+
+
+@router.post(
+    "/analyze-circle",
+    response_model=CircleAnalysisResponse,
+    summary="Analyze circle scan + crack overlays with a VLM",
+    description=(
+        "Loads the circle image, composites the provided 2D crack annotations, and asks a "
+        "vision LLM for a short technical condition report (overall status, per-crack "
+        "findings, recommended action). Uses OpenAI when OPENAI_API_KEY is set; otherwise mock."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "Image not found or malformed request."},
+        422: {"model": ErrorResponse, "description": "One or more inputs are invalid."},
+        502: {"model": ErrorResponse, "description": "VLM backend failed."},
+    },
+)
+def analyze_circle_scan(request: CircleAnalysisRequest) -> CircleAnalysisResponse | JSONResponse:
+    try:
+        return analyze_circle(request)
+    except CircleAnalysisError as exc:
+        message = str(exc)
+        code = "CIRCLE_ANALYSIS_FAILED"
+        status = 502 if "OPENAI" in message or "SDK" in message else 400
+        if "not found" in message.lower():
+            code = "CIRCLE_IMAGE_NOT_FOUND"
+        payload = ErrorResponse(error=ErrorBody(code=code, message=message))
+        return JSONResponse(status_code=status, content=payload.model_dump(exclude_none=True))
 
 
 @router.get(
