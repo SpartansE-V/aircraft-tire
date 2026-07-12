@@ -117,9 +117,13 @@ export type Impact = {
   peakArcDeg: number
   slipMps: number
   contact: boolean
+  /** The flat spot, if the wheel locked. Ground into one arc, and it does not come out. */
+  flatMm: number
+  flatDeg: number
 }
 
 const IMPACT_HUE = 0x35c8f0
+const FLAT_HUE = 0xff4d4d // the flat spot is damage, not contact — it gets the damage colour
 
 /**
  * A band of tread, drawn as an open cylinder arc: an arc about the tyre's axle IS a strip of tread.
@@ -131,17 +135,17 @@ const IMPACT_HUE = 0x35c8f0
  * is already built around +Y, so it needs no rotation at all. The mesh's own 90° quaternion is what
  * swings the whole thing to lie on its side in the scene, and the band comes along for the ride.
  */
-function treadBand(radius: number, width: number, arcDeg: number, opacity: number) {
+function treadBand(radius: number, width: number, arcDeg: number, opacity: number, color = IMPACT_HUE, additive = true) {
   const geo = new THREE.CylinderGeometry(radius, radius, width, 48, 1, true, 0, (arcDeg * Math.PI) / 180)
   return new THREE.Mesh(
     geo,
     new THREE.MeshBasicMaterial({
-      color: IMPACT_HUE,
+      color,
       transparent: true,
       opacity,
       side: THREE.DoubleSide,
       depthWrite: false,
-      blending: THREE.AdditiveBlending,
+      ...(additive ? { blending: THREE.AdditiveBlending } : {}),
     }),
   )
 }
@@ -216,6 +220,7 @@ export default function TireViewer({
     let mesh: THREE.Mesh | null = null
     let live: THREE.Mesh | null = null
     let peak: THREE.Mesh | null = null
+    let flat: THREE.Mesh | null = null
 
     new GLTFLoader().load(
       tt.model,
@@ -286,7 +291,10 @@ export default function TireViewer({
         const { radius, width } = treadSize(tire.geometry)
         peak = treadBand(radius * 1.005, width * 0.98, 1, 0.45) // the arc that took the hit
         live = treadBand(radius * 1.02, width * 0.86, 1, 0.9) // where the tarmac is touching right now
-        tire.add(peak, live)
+        // The flat spot is not contact, it is damage — so it gets the damage colour and sits flush on
+        // the tread rather than glowing above it. Rubber that is no longer there.
+        flat = treadBand(radius * 1.001, width * 0.99, 1, 0.95, FLAT_HUE, false)
+        tire.add(peak, live, flat)
 
         setWireframe.current = (w) => {
           mat.wireframe = w
@@ -332,6 +340,7 @@ export default function TireViewer({
     // when the width actually changes — which is when the load changes, not every frame.
     let liveArc = -1
     let peakArc = -1
+    let flatArc = -1
     const setArc = (m: THREE.Mesh, r: number, w: number, deg: number) => {
       m.geometry.dispose()
       m.geometry = new THREE.CylinderGeometry(r, r, w, 48, 1, true, 0, (Math.max(2, deg) * Math.PI) / 180)
@@ -341,10 +350,11 @@ export default function TireViewer({
       controls.update()
 
       const im = impactRef.current
-      if (live && peak && mesh) {
+      if (live && peak && flat && mesh) {
         const on = !!im && im.contact && im.loadKN > 1
         live.visible = on
         peak.visible = !!im && im.peakLoadKN > 1
+        flat.visible = !!im && im.flatMm > 0.1
         if (im && mesh) {
           const { radius, width } = treadSize(mesh.geometry)
           if (Math.abs(im.arcDeg - liveArc) > 0.5) {
@@ -355,6 +365,12 @@ export default function TireViewer({
             setArc(peak, radius * 1.005, width * 0.98, im.peakArcDeg)
             peakArc = im.peakArcDeg
           }
+          // The flat is the contact patch, ground in place — it is as wide as the patch that made it.
+          if (Math.abs(im.peakArcDeg - flatArc) > 0.5) {
+            setArc(flat, radius * 1.001, width * 0.99, im.peakArcDeg)
+            flatArc = im.peakArcDeg
+          }
+          flat.rotation.y = ((im.flatDeg - im.peakArcDeg / 2) * Math.PI) / 180
           // A cylinder arc starts at its own 0 and runs anticlockwise, so centre it on the angle.
           live.rotation.y = ((im.contactDeg - im.arcDeg / 2) * Math.PI) / 180
           peak.rotation.y = ((im.peakDeg - im.peakArcDeg / 2) * Math.PI) / 180
@@ -474,6 +490,12 @@ export default function TireViewer({
               ? `Now ${Math.round(impact.contactDeg)}° · ${impact.slipMps > 0.5 ? `sliding ${impact.slipMps.toFixed(0)} m/s` : 'rolling'}`
               : 'Off the runway'}
           </div>
+          {impact.flatMm > 0.1 && (
+            <div className="mt-1 border-t pt-1" style={{ borderColor: `#${FLAT_HUE.toString(16)}` }}>
+              <span style={{ color: `#${FLAT_HUE.toString(16)}` }}>■ Flat spot {impact.flatMm.toFixed(1)} mm</span>
+              <div className="mt-0.5 text-[var(--ink-4)]">Wheel locked at {Math.round(impact.flatDeg)}° and ground there</div>
+            </div>
+          )}
         </div>
       )}
 

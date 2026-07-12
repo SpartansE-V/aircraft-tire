@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import Aircraft from './Aircraft'
 import { Gauge, HUE, RowBars, Sparkline } from './charts'
 import { FLEET_TIRES } from './data'
+import Forecast from './Forecast'
 import { beadCurve, CAL, contactPatchDeg, OLEO, type Landing, type Surface } from './sim'
 import { LEAD_AXLE, simulateLandingRun, type Attitude } from './landingEngine'
 import { TireDetail } from './TireCards'
 import TireViewer, { type Impact } from './TireViewer'
 import { TRACKS, type Track } from './tracks'
 import TrackMap from './TrackMap'
-import { Card, Field, Header, Kpi, Mini, Open, STATUS, useTheme } from './ui'
+import { Card, Field, Header, Kpi, Mini, Mock, Open, STATUS, useTheme } from './ui'
 
 const SURFACES: { key: Surface; label: string; rwycc: number }[] = [
   { key: 'dry', label: 'Dry', rwycc: 6 },
@@ -25,13 +26,17 @@ function landingAt(track: Track, base?: Partial<Landing>): Landing {
     sinkFpm: 240,
     gsKt: 138,
     brakeShare: 0.55,
-    crosswindKt: 12,
+    windKt: 14,
+    windDirDeg: (track.headingDeg + 40) % 360, // off the nose and to one side: some head, some cross
+    antiskid: true,
     ...base,
-    // The track owns these four — picking an airport is what changes them.
+    // The track owns these five — picking an airport is what changes them. The heading matters now:
+    // a wind is only a headwind or a crosswind *relative to the runway you are landing on*.
     oatC: track.oatC,
     surface: track.surface,
     elevFt: track.elevFt,
     runwayM: track.lengthM,
+    runwayHeadingDeg: track.headingDeg,
   }
 }
 
@@ -79,6 +84,8 @@ export default function SimulateLanding() {
     peakArcDeg: pw.impactArcDeg,
     slipMps: fw.slipMps,
     contact: fw.contact,
+    flatMm: pw.flatSpotMm,
+    flatDeg: pw.flatSpotDeg,
   }
   // Peak load on each axle of the truck. The aft one lands first and takes the transient; the front
   // one is the one braking leans on. Averaging these together is exactly the mistake to avoid.
@@ -115,7 +122,7 @@ export default function SimulateLanding() {
 
   return (
     <div className="min-h-screen p-4 font-mono text-[var(--ink-2)] lg:p-6">
-      <Header status={r.status} theme={theme} onTheme={setTheme} path="/simulate-landing" />
+      <Header status={r.status} theme={theme} onTheme={setTheme} path="/simulate-landing" mockStatus />
 
       <div className="grid gap-3 lg:grid-cols-12">
         {/* left: the inputs */}
@@ -185,7 +192,7 @@ export default function SimulateLanding() {
                   which put every load, energy and temperature on this page about 3x low. */}
               <Slider label="Landing weight" v={l.weightT} min={168} max={251} step={1} unit=" t" onChange={(v) => set('weightT', v)} bad={l.weightT > 245} />
               <Slider label="Sink rate" v={l.sinkFpm} min={60} max={720} step={10} unit=" fpm" onChange={(v) => set('sinkFpm', v)} bad={l.sinkFpm > 600} />
-              <Slider label="Groundspeed" v={l.gsKt} min={100} max={175} step={1} unit=" kt" onChange={(v) => set('gsKt', v)} />
+              <Slider label="Approach speed" v={l.gsKt} min={100} max={175} step={1} unit=" kt" onChange={(v) => set('gsKt', v)} />
               <Slider
                 label="Energy into brakes"
                 v={Math.round(l.brakeShare * 100)}
@@ -196,7 +203,50 @@ export default function SimulateLanding() {
                 onChange={(v) => set('brakeShare', v / 100)}
               />
               <Slider label="OAT" v={l.oatC} min={-20} max={48} step={1} unit=" °C" onChange={(v) => set('oatC', v)} bad={l.oatC > 35} />
-              <Slider label="Crosswind" v={l.crosswindKt} min={0} max={35} step={1} unit=" kt" onChange={(v) => set('crosswindKt', v)} bad={l.crosswindKt > 25} />
+              {/* A wind, not a crosswind. Both components come off this one vector against the runway
+                  heading, so they cannot disagree — and a headwind is finally something the aircraft
+                  can feel, which it could not for the model's entire life. */}
+              <Slider label="Wind speed" v={l.windKt} min={0} max={40} step={1} unit=" kt" onChange={(v) => set('windKt', v)} bad={Math.abs(r.crosswindKt) > 25} />
+              <Slider label="Wind from" v={l.windDirDeg} min={0} max={359} step={5} unit="°" onChange={(v) => set('windDirDeg', v)} />
+            </div>
+
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Mini
+                label="Headwind"
+                value={`${r.headwindKt >= 0 ? '' : '−'}${Math.abs(r.headwindKt).toFixed(0)} kt`}
+                bad={r.headwindKt < -5}
+              />
+              <Mini label="Crosswind" value={`${Math.abs(r.crosswindKt).toFixed(0)} kt`} bad={Math.abs(r.crosswindKt) > 25} />
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-[var(--ink-4)]">
+              Runway {track.rwy} points {track.headingDeg}°. Swing the wind onto the nose and it is all headwind — the cheapest runway there is, because
+              groundspeed falls and every energy term goes with its square. Swing it across and it is all crosswind, and the gear pays instead.
+            </p>
+
+            {/* Anti-skid. The one switch on this page that decides whether a hard stop costs a tyre. */}
+            <div className="mt-3">
+              <div className="mb-1 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">Anti-skid</div>
+              <div className="grid grid-cols-2 gap-2">
+                {[true, false].map((on) => (
+                  <button
+                    key={String(on)}
+                    onClick={() => set('antiskid', on)}
+                    aria-pressed={l.antiskid === on}
+                    className="border px-2 py-1.5 text-[10px] uppercase tracking-widest transition-colors"
+                    style={{
+                      borderColor: l.antiskid === on ? (on ? 'var(--primary)' : 'var(--crit)') : 'var(--line-2)',
+                      color: l.antiskid === on ? (on ? 'var(--primary)' : 'var(--crit)') : 'var(--ink-4)',
+                    }}
+                  >
+                    {on ? 'On' : 'Failed'}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] leading-relaxed text-[var(--ink-4)]">
+                On, it holds the tyre at the friction peak and the wheel never locks — so past about half pedal you are µ-limited and more brake buys nothing.
+                Failed, a brake demand the runway cannot supply stops the wheel dead: it stops you <b>worse</b> (sliding grips less than rolling) and grinds a
+                flat spot into one arc of tread.
+              </p>
             </div>
 
             <div className="mt-3">
@@ -229,6 +279,13 @@ export default function SimulateLanding() {
 
             <Open>The model is first-order physics with fitted coefficients — refit every constant once serials join to FOQA</Open>
           </Card>
+
+          {/*
+            Everything above is this aircraft: measured off the tyre, or computed by physics we can check.
+            What follows is a demonstration model's opinion about the next fifty cycles. Those are not the
+            same kind of claim, so they do not get the same kind of card. See API_INTEGRATION.md.
+          */}
+          <Forecast tire={tire} landing={l} attitude={att} />
         </div>
 
         {/* centre: the aircraft — and the wheels on it are how you pick a tire */}
@@ -282,27 +339,30 @@ export default function SimulateLanding() {
             />
           </section>
 
-          <section className="border p-3" style={{ borderColor: s.ink }}>
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs uppercase tracking-[0.2em]" style={{ color: s.ink }}>
-                {s.glyph} {s.text}
-              </span>
-              <span className="text-[9px] uppercase tracking-widest text-[var(--ink-4)]">
-                {tire.id} · {tire.serial}
-              </span>
-            </div>
-            {r.flags.length === 0 ? (
-              <p className="mt-2 text-xs text-[var(--ink-3)]">Within limits — no removal trigger from this event.</p>
-            ) : (
-              <ul className="mt-2 space-y-1">
-                {r.flags.map((f) => (
-                  <li key={f} className="border-l-2 pl-2 text-xs leading-snug" style={{ borderColor: s.ink }}>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {/* The verdict is about this tyre — its tread, its serial, its status. Invented, all of it. */}
+          <Mock>
+            <section className="border p-3" style={{ borderColor: s.ink }}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs uppercase tracking-[0.2em]" style={{ color: s.ink }}>
+                  {s.glyph} {s.text}
+                </span>
+                <span className="text-[9px] uppercase tracking-widest text-[var(--ink-4)]">
+                  {tire.id} · {tire.serial}
+                </span>
+              </div>
+              {r.flags.length === 0 ? (
+                <p className="mt-2 text-xs text-[var(--ink-3)]">Within limits — no removal trigger from this event.</p>
+              ) : (
+                <ul className="mt-2 space-y-1">
+                  {r.flags.map((f) => (
+                    <li key={f} className="border-l-2 pl-2 text-xs leading-snug" style={{ borderColor: s.ink }}>
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </Mock>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Kpi label="Peak vertical" value={r.peakG.toFixed(2)} unit="G" sub={`flag > ${CAL.gLimit} G`} bad={r.peakG > CAL.gLimit} />
@@ -378,7 +438,7 @@ export default function SimulateLanding() {
             </Open>
           </Card>
 
-          <Card title="Tread budget" tag="Projection">
+          <Card title="Tread budget" mock tag="Projection">
             <div className="grid grid-cols-2 gap-2">
               <Mini label="Groove now" value={`${Math.min(...tire.grooves).toFixed(2)} mm`} />
               <Mini label="After event" value={`${r.grooveAfter.toFixed(2)} mm`} bad={r.grooveAfter < tire.grooveLimit} />
@@ -394,27 +454,30 @@ export default function SimulateLanding() {
           </div>
         </div>
 
-        {/* right: the tire you clicked on the plane — the same cards /tyres shows */}
+        {/* right: the tire you clicked on the plane — the same cards /tyres shows. All of it is the
+            tyre's own condition, so all of it is invented, so all of it goes with the mock switch. */}
         <div className="flex flex-col gap-3 lg:col-span-3">
-          <div className="border border-[var(--line)] bg-[var(--panel)]/80 px-3 py-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs uppercase tracking-[0.2em]" style={{ color: 'var(--primary)' }}>
-                {tire.id} · {tire.label}
-              </span>
-              <span className="text-[9px] uppercase tracking-widest" style={{ color: s.ink }}>
-                {s.glyph} {s.text}
-              </span>
+          <Mock>
+            <div className="border border-[var(--line)] bg-[var(--panel)]/80 px-3 py-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs uppercase tracking-[0.2em]" style={{ color: 'var(--primary)' }}>
+                  {tire.id} · {tire.label}
+                </span>
+                <span className="text-[9px] uppercase tracking-widest" style={{ color: s.ink }}>
+                  {s.glyph} {s.text}
+                </span>
+              </div>
+              <p className="mt-1 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">Click a wheel on the aircraft to switch tire</p>
             </div>
-            <p className="mt-1 text-[10px] uppercase tracking-widest text-[var(--ink-4)]">Click a wheel on the aircraft to switch tire</p>
-          </div>
 
-          {/* The same 3D tyre /tyres shows — with the landing on it. Scrub the timeline and the blue
-              band runs round the tread: that is the arc of rubber the runway is actually touching. */}
-          <div className="relative h-[340px] border border-[var(--line)] bg-[var(--panel)]">
-            <TireViewer defects={tire.defects} serial={tire.serial} theme={theme} impact={impact} compact />
-          </div>
+            {/* The same 3D tyre /tyres shows — with the landing on it. Scrub the timeline and the blue
+                band runs round the tread: that is the arc of rubber the runway is actually touching. */}
+            <div className="relative h-[340px] border border-[var(--line)] bg-[var(--panel)]">
+              <TireViewer defects={tire.defects} serial={tire.serial} theme={theme} impact={impact} compact />
+            </div>
 
-          <TireDetail tire={tire} />
+            <TireDetail tire={tire} />
+          </Mock>
         </div>
 
       </div>

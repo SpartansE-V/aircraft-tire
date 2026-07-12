@@ -9,10 +9,46 @@ export type Landing = {
   gsKt: number // indicated approach speed — true speed over the ground rises with field elevation
   brakeShare: number // 0..1 — fraction of kinetic energy taken by brakes (rest: reverse thrust + drag)
   oatC: number
-  crosswindKt: number
   surface: Surface
   elevFt: number // field elevation — thin air means a faster touchdown for the same indicated speed
   runwayM: number // landing distance available; what the stop has to fit inside
+  runwayHeadingDeg: number // which way the runway points. Wind means nothing without it.
+
+  /**
+   * The wind, as an actual wind: a speed, and the direction it blows *from*, in degrees true.
+   *
+   * This used to be a lone `crosswindKt`, which meant the model had no headwind at all — so a 30 kt
+   * wind could only ever *lengthen* the stop, through a directional-control penalty. A headwind is the
+   * cheapest runway you will ever get, and this aircraft could not feel one.
+   *
+   * Both components now come off one vector against the runway heading, so they cannot contradict each
+   * other: point the wind down the runway and it is all headwind; point it across and it is all
+   * crosswind. Nothing has to be kept in sync by hand.
+   */
+  windKt: number
+  windDirDeg: number
+
+  /**
+   * Anti-skid — the thing standing between a hard stop and a scrapped tyre.
+   *
+   * On, it modulates brake pressure to hold the tyre near the peak of its friction curve, and the
+   * wheel will not lock however hard the pedal is pushed. Off, a brake demand the runway cannot
+   * support stops the wheel dead — and a locked wheel does not roll, it *grinds*, taking one arc of
+   * tread down towards the carcass.
+   */
+  antiskid: boolean
+}
+
+const RAD = Math.PI / 180
+
+/** Wind straight down the runway. Positive is a headwind — free runway. Negative is a tailwind. */
+export function headwindKt(l: Landing) {
+  return l.windKt * Math.cos((l.windDirDeg - l.runwayHeadingDeg) * RAD)
+}
+
+/** Wind across the runway: the component that has to be crabbed out, and that scrubs the tyres. */
+export function crosswindKt(l: Landing) {
+  return l.windKt * Math.sin((l.windDirDeg - l.runwayHeadingDeg) * RAD)
 }
 
 // Where the gear actually is. These are measurements of a 777-300ER, not knobs — you look them up,
@@ -280,6 +316,32 @@ export const CAL = {
   brakeDecelGain: 0.5, // higher brake share means harder wheel braking and a shorter rollout
   crosswindDecelLossMax: 0.12, // directional-control margin: strong crosswind costs braking efficiency
   mu: { dry: 0.4, wet: 0.25, contaminated: 0.15 } as Record<Surface, number>,
+
+  /**
+   * ANTI-SKID, and what happens without it.
+   *
+   * `muDemand` is the friction the brakes *ask* the runway for at full pedal. If the runway cannot
+   * supply it, one of two things happens, and which one is the entire difference between a hard stop
+   * and a scrapped tyre:
+   *
+   *   - anti-skid on: it backs the pressure off and holds the tyre near the peak of its friction
+   *     curve. You are µ-limited, so past a certain pedal there is nothing more to be had — but the
+   *     wheel keeps turning.
+   *   - anti-skid off: the wheel stops dead. And a locked wheel gives you *less* braking, not more,
+   *     because sliding friction is below peak friction — so it stops you worse AND grinds a flat spot.
+   */
+  muDemandMax: 0.5, // friction the brakes command at 100 % pedal
+  muSlideFactor: 0.7, // a sliding tyre grips less than a rolling one. Locking up is a double penalty.
+  // Rubber ground off a locked tyre per MJ dissipated into its contact patch. A wheel locked for a few
+  // hundred metres goes through the tread and into the carcass, which is why this is a top-3 reason
+  // tyres come off aeroplanes and why anti-skid failure is a land-immediately item.
+  flatSpotMmPerMJ: 0.8,
+  flatSpotScrapMm: 3, // past this the tyre is scrap, not a retread candidate
+  // There is only so much rubber to grind. Below the last groove there is a little more, and then
+  // there is the carcass — and a tyre ground to its carcass at 60 m/s does not keep making a tidy flat
+  // spot, it lets go. So the depth is capped at the rubber the tyre actually has, and past that the
+  // answer stops being a number of millimetres and becomes "it burst".
+  carcassMarginMm: 2,
   scrubSurface: { dry: 1, wet: 1.25, contaminated: 1.6 } as Record<Surface, number>, // slip → more scrub
   // Dynamic hydroplaning (Horne, NASA TN D-2056): above roughly 9·√psi kt the tyre stops touching the
   // runway and rides up onto a film of water. This is not a coefficient anyone fitted — it is the
@@ -343,9 +405,24 @@ export function simulate(l: Landing, tire: { grooves: number[]; grooveLimit: num
   const brakePeakC = thermal.packPeakC
   const beadPeakC = thermal.beadPeakC
 
-  // Tread budget after this landing.
+  // Locked wheels. The aircraft slides from the moment the brakes bite until it stops, and every metre
+  // of that is ground off one arc of one tyre.
+  const locked = wheelsLock(l)
+  const slideDistM = locked ? Math.max(0, stopDistM - vGround * CAL.rolloutDelayS) : 0
   const minGroove = Math.min(...tire.grooves)
-  const grooveAfter = minGroove - scrubMm
+
+  // How much rubber there is to grind before the carcass, and how far it slides before it runs out. A
+  // tyre ground to its casing at 60 m/s does not go on making a tidy flat spot — it lets go.
+  const rubberMm = minGroove + CAL.carcassMarginMm
+  const groundMm = flatSpotMm(loadPerTireKN, slideDistM, l)
+  const burst = groundMm > rubberMm
+  const flatMm = Math.min(groundMm, rubberMm)
+  const burstAtM = burst ? (slideDistM * rubberMm) / groundMm : 0
+
+  // Tread budget after this landing. A flat spot comes out of the same rubber the scrub does.
+  // Floored at zero. There is no such thing as −2 mm of tread: a tyre ground past its grooves is at the
+  // carcass, and the flag for that is `burst`, not a negative depth.
+  const grooveAfter = Math.max(0, minGroove - scrubMm - flatMm)
   const cyclesToLimit = Math.max(0, Math.floor((minGroove - tire.grooveLimit) / scrubMm))
 
   const overrun = stopMarginM < 0
@@ -356,14 +433,24 @@ export function simulate(l: Landing, tire: { grooves: number[]; grooveLimit: num
     hydroplanes && `Hydroplaning — at ${Math.round(tire.psi)} psi this tire rides up on water above ${Math.round(vpKt)} kt, and touchdown is ${Math.round(gsTrueKt)} kt`,
     beadPeakC > CAL.fusePlugC &&
       `Bead reaches ${Math.round(beadPeakC)} °C — fuse plug releases above ${CAL.fusePlugC} °C, and it gets there ${Math.round(thermal.beadPeakAtS / 60)} min after landing, on the taxiway or at the gate`,
+    locked &&
+      `Anti-skid off — ${Math.round(l.brakeShare * 100)} % brake demands µ ${(CAL.muDemandMax * l.brakeShare).toFixed(2)} and the ${l.surface} runway supplies ${(canHydroplane(l.surface) ? CAL.muHydroplane : CAL.mu[l.surface]).toFixed(2)}. The wheels lock, slide ${Math.round(slideDistM)} m, and stop the aircraft *worse* than a rolling tyre would`,
+    locked && burst && `Tyre burst — the locked wheel ground through all ${rubberMm.toFixed(1)} mm of rubber on that arc after ${Math.round(burstAtM)} m of a ${Math.round(slideDistM)} m slide, and went into the carcass`,
+    locked && !burst && flatMm > 0.2 && `Flat-spotted — ${flatMm.toFixed(1)} mm ground off one arc of tread while the wheel was locked${flatMm > CAL.flatSpotScrapMm ? '. The tyre is scrap' : ''}`,
     grooveAfter < tire.grooveLimit && `Groove ${grooveAfter.toFixed(2)} mm lands under the ${tire.grooveLimit} mm limit`,
     Math.abs(tire.psi - tire.psiTarget) / tire.psiTarget > 0.05 && `Tire is ${Math.round(((tire.psi - tire.psiTarget) / tire.psiTarget) * 100)} % off target psi before the event`,
   ].filter((f): f is string => typeof f === 'string')
 
-  const severe = overrun || peakG > CAL.gLimit || hydroplanes || beadPeakC > CAL.fusePlugC || grooveAfter < tire.grooveLimit
+  const severe = overrun || peakG > CAL.gLimit || hydroplanes || locked || beadPeakC > CAL.fusePlugC || grooveAfter < tire.grooveLimit
   const status = flags.length === 0 ? 'ok' : severe ? 'action' : 'watch'
 
-  return { peakG, loadPerTireKN, scrubMm, keMJ, brakeEnergyMJ, brakePeakC, beadPeakC, beadPeakAtS: thermal.beadPeakAtS, thermal, stopDistM, stopMarginM, gsTrueKt, grooveAfter, cyclesToLimit, hydroplanes, vpKt, flags, status } as const
+  return {
+    peakG, loadPerTireKN, scrubMm, keMJ, brakeEnergyMJ, brakePeakC, beadPeakC, beadPeakAtS: thermal.beadPeakAtS, thermal,
+    stopDistM, stopMarginM, gsTrueKt, grooveAfter, cyclesToLimit, hydroplanes, vpKt,
+    locked, slideDistM, flatSpotMm: flatMm, burst, burstAtM,
+    headwindKt: headwindKt(l), crosswindKt: crosswindKt(l),
+    flags, status,
+  } as const
 }
 
 // Under-inflation flexes the sidewall and drags the shoulder — more scrub, hotter carcass.
@@ -371,21 +458,73 @@ export function tirePressureScrubFactor(tire: { psi: number; psiTarget: number }
   return 1 + Math.max(0, (tire.psiTarget - tire.psi) / tire.psiTarget) * 2
 }
 
-export function trueGroundSpeedMps(l: Landing) {
+/** True airspeed at touchdown: the indicated approach speed, corrected for thin air up high. */
+export function trueAirspeedMps(l: Landing) {
   return l.gsKt * (1 + (CAL.tasPctPer1000ft / 100) * (l.elevFt / 1000)) * MS_PER_KT
+}
+
+/**
+ * Speed over the ground — which is what the runway, the brakes and the tyres actually see.
+ *
+ * This used to return the true *airspeed* and call it groundspeed, which is where the missing headwind
+ * was hiding in plain sight. An aircraft flies at Vref through the *air*; the ground goes past at Vref
+ * minus whatever the air itself is doing. Land into 25 kt and you touch down 25 kt slower over the
+ * tarmac — every energy term goes with the square of this, so it is the cheapest runway there is.
+ */
+export function trueGroundSpeedMps(l: Landing) {
+  return Math.max(10 * MS_PER_KT, trueAirspeedMps(l) - headwindKt(l) * MS_PER_KT)
 }
 
 export function rolloutDecelMps2(l: Landing, mu = CAL.mu[l.surface]) {
   const brakeShare = Math.min(1, Math.max(0, l.brakeShare))
-  const brakeFactor = CAL.brakeDecelBase + CAL.brakeDecelGain * brakeShare
-  const crosswindLoss = Math.min(CAL.crosswindDecelLossMax, l.crosswindKt / 300)
-  return Math.max(0.1, mu * G * brakeFactor * (1 - crosswindLoss))
+  // Capped at 1. A wheel cannot decelerate the aeroplane harder than µ·g however hard the pedal is
+  // pushed — that is what µ *means*. The old curve ran to 1.22, which quietly bought free braking
+  // above about half pedal. What actually happens past that point is anti-skid holding you at the
+  // limit... or, without it, the wheel locking. Both are below.
+  const brakeFactor = Math.min(1, CAL.brakeDecelBase + CAL.brakeDecelGain * brakeShare)
+  const crosswindLoss = Math.min(CAL.crosswindDecelLossMax, Math.abs(crosswindKt(l)) / 300)
+  // A locked wheel slides, and a sliding tyre grips less than a rolling one. Locking up does not stop
+  // you faster; it stops you slower, and destroys the tyre on the way.
+  const slide = wheelsLock(l) ? CAL.muSlideFactor : 1
+  return Math.max(0.1, mu * G * brakeFactor * slide * (1 - crosswindLoss))
+}
+
+/**
+ * Does the brake demand exceed what the runway can actually supply?
+ *
+ * With anti-skid, never: it backs off and holds the tyre at the friction peak. Without it, the pedal
+ * commands a torque the surface cannot react, and the wheel stops turning. On a dry runway you have to
+ * stamp on it; on a wet one, half pedal will do it; on standing water the tyre is aquaplaning and
+ * almost any braking at all locks it.
+ */
+export function wheelsLock(l: Landing) {
+  if (l.antiskid) return false
+  const muAvailable = canHydroplane(l.surface) ? CAL.muHydroplane : CAL.mu[l.surface]
+  return CAL.muDemandMax * Math.min(1, Math.max(0, l.brakeShare)) > muAvailable
 }
 
 /** The speed above which this tyre stops touching the runway. Falls with pressure — which is the
  *  entire point: a soft tyre hydroplanes sooner, and the app already knows every tyre's psi. */
 export function hydroplaneSpeedKt(psi: number) {
   return CAL.hydroplaneK * Math.sqrt(Math.max(0, psi))
+}
+
+/**
+ * How deep a flat spot a locked wheel grinds into one tyre.
+ *
+ * This is *the* mechanism, and it is worth being precise about why it is different from spin-up. At
+ * touchdown the tyre also slides — hard, at the full groundspeed — but it is *accelerating*, so it
+ * turns several times while it does, and the abrasion is smeared right round the circumference. That
+ * is why a normal landing does not flat-spot a tyre.
+ *
+ * A locked wheel does not turn at all. Every metre the aeroplane slides is ground off the *same arc*.
+ * All of the energy lands on one patch, and it goes through the tread and into the carcass.
+ */
+export function flatSpotMm(loadKN: number, slideDistM: number, l: Landing) {
+  if (!wheelsLock(l)) return 0
+  const muSlide = (canHydroplane(l.surface) ? CAL.muHydroplane : CAL.mu[l.surface]) * CAL.muSlideFactor
+  const energyMJ = (muSlide * loadKN * 1000 * slideDistM) / 1e6
+  return CAL.flatSpotMmPerMJ * energyMJ
 }
 
 /**
@@ -441,14 +580,16 @@ export function stopDistanceM(l: Landing, psi: number, decel = rolloutDecelMps2(
  * landing that cannot physically happen.
  */
 export function driftAngleDeg(l: Landing) {
-  const v = trueGroundSpeedMps(l)
+  // Against the *airspeed*: the crab is how far the aircraft has to point into the air it is flying
+  // through, and the air is what the wind is made of.
+  const v = trueAirspeedMps(l)
   if (v < 1) return 0
-  return (Math.asin(Math.min(1, Math.max(-1, (l.crosswindKt * MS_PER_KT) / v))) * 180) / Math.PI
+  return (Math.asin(Math.min(1, Math.max(-1, (crosswindKt(l) * MS_PER_KT) / v))) * 180) / Math.PI
 }
 
 /** Side force on the airframe from the drift the pilot did NOT crab out. Fully crabbed → zero. */
 export function aeroSideKN(l: Landing, crabDeg: number) {
-  const v = trueGroundSpeedMps(l)
+  const v = trueAirspeedMps(l)
   const uncorrectedRad = ((driftAngleDeg(l) + crabDeg) * Math.PI) / 180
   return (0.5 * AERO.rhoKgM3 * v ** 2 * AERO.wingAreaM2 * AERO.cyBetaPerRad * uncorrectedRad) / 1000
 }
