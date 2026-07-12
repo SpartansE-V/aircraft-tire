@@ -78,16 +78,7 @@ function Governance({ a }: { a: AssessmentResponse }) {
         <Field k="release" v={g.release_id} mono />
         <Field k="lifecycle" v={g.lifecycle} />
         <Field k="permitted use" v={g.requested_use} />
-        <Field k="confidence" v={`${a.confidence.level} — ${a.confidence.reason}`} />
       </div>
-      <p className="mt-2 text-[10px] leading-relaxed text-[var(--ink-3)]">{a.disclaimer}</p>
-      {a.assumptions.length > 0 && (
-        <ul className="mt-2 list-inside list-disc space-y-0.5 text-[10px] leading-relaxed text-[var(--ink-4)]">
-          {a.assumptions.map((s) => (
-            <li key={s}>{s}</li>
-          ))}
-        </ul>
-      )}
     </details>
   )
 }
