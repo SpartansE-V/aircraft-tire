@@ -1,5 +1,8 @@
 """Service metadata and health endpoint tests."""
 
+import subprocess
+import sys
+
 import pytest
 from httpx import AsyncClient
 
@@ -23,6 +26,30 @@ async def test_health(client: AsyncClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
+
+
+def test_app_import_does_not_require_pandas() -> None:
+    script = """
+import builtins
+
+real_import = builtins.__import__
+
+def import_without_pandas(name, *args, **kwargs):
+    if name == "pandas" or name.startswith("pandas."):
+        raise ImportError("pandas intentionally unavailable")
+    return real_import(name, *args, **kwargs)
+
+builtins.__import__ = import_without_pandas
+import app.main
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 @pytest.mark.asyncio

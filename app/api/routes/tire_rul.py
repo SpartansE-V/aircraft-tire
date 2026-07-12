@@ -27,7 +27,6 @@ from app.services.agent_service import (
 )
 from app.services.fleet_tires_service import fleet_tires_service
 from app.services.tire_rul_service import tire_rul_service
-from app.tire_rul.enrich_tire_assets import enrich_tires
 
 # RUL stands for Remaining Useful Life
 router = APIRouter(prefix="/api/v1/tire_rul", tags=["Tire Remaining Useful Life Prediction"])
@@ -51,6 +50,14 @@ class EnrichTireAssetsResponse(StrictSchema):
     status_counts: dict[str, int]
     model_counts: dict[str, int]
     group_counts: dict[str, int]
+
+
+def enrich_tires(*, seed: int) -> Any:
+    """Load the pandas-backed enrichment job only when its endpoint is called."""
+
+    from app.tire_rul.enrich_tire_assets import enrich_tires as run_enrichment
+
+    return run_enrichment(seed=seed)
 
 
 def _fleet_unavailable_response(exc: AgentDataUnavailableError) -> JSONResponse:
@@ -251,12 +258,12 @@ def enrich_fleet_scans(
                     "Enriching tire scan packs needs the AI stack (`uv sync --extra ai`)."
                 )
             )
-        except FileNotFoundError:
-            return _fleet_unavailable_response(
-                AgentDataUnavailableError(
-                    "Fleet dataset not found; run `make data` before enrich-scans."
-                )
+        except FileNotFoundError as exc:
+            detail = str(exc).strip() or (
+                "Fleet dataset or mock-tyre assets not found; "
+                "run `make data` locally or bake assets/mock-tyres/release into the image."
             )
+            return _fleet_unavailable_response(AgentDataUnavailableError(detail))
         except AgentDataUnavailableError as exc:
             return _fleet_unavailable_response(exc)
 

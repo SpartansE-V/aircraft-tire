@@ -1,5 +1,5 @@
 import { FLEET_TIRES, type Tire } from './data.ts'
-import { aeroSideKN, CAL, canHydroplane, contactPatchDeg, driftAngleDeg, G, GEAR, hydroplaneSpeedKt, OLEO, oleoResponse, rolloutDecelMps2, simulate, staticNoseShare, tirePressureScrubFactor, trueGroundSpeedMps, type Landing, type OleoRun, type SimResult } from './sim.ts'
+import { aeroSideKN, CAL, canHydroplane, contactPatchDeg, crosswindKt, driftAngleDeg, flatSpotMm, G, GEAR, headwindKt, hydroplaneSpeedKt, OLEO, oleoResponse, rolloutDecelMps2, simulate, staticNoseShare, tirePressureScrubFactor, trueGroundSpeedMps, type Landing, type OleoRun, type SimResult } from './sim.ts'
 import type { Track } from './tracks.ts'
 
 export type Attitude = { pitchDeg: number; rollDeg: number; crabDeg: number; liftShare: number }
@@ -59,6 +59,17 @@ export type PerWheelSummary = {
    *  wheel is up to speed and stops sliding. This is the rubber the landing actually cost. */
   impactDeg: number
   impactArcDeg: number
+  /**
+   * The flat spot, if the wheel locked: how deep it was ground, and where.
+   *
+   * A locked wheel does not turn, so every metre the aircraft slides is taken off the *same arc* — and
+   * that is the whole difference from spin-up, where the tyre also slides hard but is turning while it
+   * does, smearing the abrasion right round the circumference. One grinds a flat; the other does not.
+   */
+  flatSpotMm: number
+  flatSpotDeg: number
+  burst: boolean // it ran out of rubber before it ran out of runway
+  locked: boolean
 }
 
 export type LandingSummary = SimResult & {
@@ -94,6 +105,7 @@ const TAILSTRIKE_PITCH_DEG = 11
 const FLARE_FLOAT_PER_DEG_M = 8
 const LIFT_DELAY_MAX_S = 1.8
 const NOSE_DOWN_S = 3 // how long the nose stays flying after the mains touch, while the aircraft derotates
+const BRAKES_BITE_S = CAL.rolloutDelayS // the wheels have been rolling for seconds by the time they lock
 
 export function simulateLandingRun(scenario: LandingScenario): LandingRun {
   const tires = scenario.tires?.length ? scenario.tires : FLEET_TIRES
@@ -199,11 +211,28 @@ function summarizeWheels(base: SimResult, selected: Tire, tires: Tire[], attitud
       // arbitrary clocking at touchdown plus however far it had turned by then — and the arc is wider
       // the harder it was hit, because a squashed tyre touches along a longer patch.
       const spin = spinUp(arrivalPeakAtS[t.id], scenarioSpeedMps(landing), t.radiusM)
+
+      // The flat spot. Only the mains have brakes, so only the mains can lock — and when they do, the
+      // wheel has already spun up and been rolling for seconds, so the arc it stops on is wherever it
+      // happened to be. Everything the aircraft slides after that is ground off that one arc.
+      const locked = active && base.locked
+      // Capped at the rubber THIS tyre has. The scalar model caps against its own selected tyre, which
+      // is not this one — and uncapped, a locked wheel reported 36.8 mm of flat on a tyre carrying
+      // 5.8 mm of tread. A flat spot cannot be deeper than the tyre is thick; past that it is a burst.
+      const rubberMm = Math.min(...t.grooves) + CAL.carcassMarginMm
+      const ground = locked ? flatSpotMm(atBraking[t.id], base.slideDistM, landing) * condition.scrubFactor : 0
+      const flat = Math.min(ground, rubberMm)
+      const atLock = spinUp(BRAKES_BITE_S, scenarioSpeedMps(landing), t.radiusM)
+
       return [
         t.id,
         {
           impactDeg: (t.clockDeg + contactDeg(spin.thetaRad)) % 360,
           impactArcDeg: contactPatchDeg(peakLoadKN, t.radiusM),
+          flatSpotMm: flat,
+          flatSpotDeg: (t.clockDeg + contactDeg(atLock.thetaRad)) % 360,
+          burst: ground > rubberMm,
+          locked,
           peakLoadKN,
           scrubMm: active ? totalScrub * share * tirePressureScrubFactor(t) * condition.scrubFactor + crabScrub : 0,
           brakeMJ: active ? totalBrake * brakeShare * condition.heatFactor : 0,
@@ -235,10 +264,11 @@ function summarizeSelected(
     return { ...base, ...arrival, stopDistM: profile.stopDistM, stopMarginM: profile.stopMarginM, flags, status: statusFor(base.status, flags, profile, attitude, oleo), touchdownOrder, perWheel }
   }
   const minGroove = Math.min(...selected.grooves)
-  const grooveAfter = minGroove - selectedWheel.scrubMm
+  // The scrub *and* the flat spot both come out of the same rubber, and neither can take it below zero.
+  const grooveAfter = Math.max(0, minGroove - selectedWheel.scrubMm - selectedWheel.flatSpotMm)
   const cyclesToLimit = Math.max(0, Math.floor((minGroove - selected.grooveLimit) / selectedWheel.scrubMm))
   const selectedFlags = [...flags]
-  if (grooveAfter < selected.grooveLimit && !selectedFlags.some((f) => /Groove/.test(f))) {
+  if (grooveAfter < selected.grooveLimit && !selectedFlags.some((f) => /Groove|burst/i.test(f))) {
     selectedFlags.push(`Groove ${grooveAfter.toFixed(2)} mm lands under the ${selected.grooveLimit} mm limit`)
   }
   const severe =
@@ -355,7 +385,7 @@ function buildFrames(
       // the gas pushes, and finally settles to 0 — parked.
       squatM: (t < touchdownS ? 0 : strut.strokeM + strut.tyreM) - staticDropM,
       brakeShare: post <= CAL.rolloutDelayS ? 0 : scenario.landing.brakeShare * Math.min(1, brakingT / 2),
-      wheel: frameWheels(perWheel, contactIds, progress, loadsKN, tires, touchedAtS, t, v0),
+      wheel: frameWheels(perWheel, contactIds, progress, loadsKN, tires, touchedAtS, t, v0, speedMps, effectiveBrakingT > 0),
       flags: [...summary.flags],
     })
 
@@ -380,12 +410,18 @@ function frameWheels(
   touchedAtS: Record<string, number>,
   tS: number,
   groundMps: number,
+  speedNowMps: number,
+  braking: boolean,
 ): Record<string, PerWheelFrame> {
   return Object.fromEntries(
     tires.map((t) => {
       const w = perWheel[t.id]
       const since = touchedAtS[t.id] === undefined ? -1 : tS - touchedAtS[t.id]
       const spin = spinUp(since, groundMps, t.radiusM)
+      // A locked wheel has stopped turning. It is not rolling down the runway any more, it is being
+      // dragged along it — so the contact patch stops moving round the tread and the whole slide is
+      // taken out of the arc it froze on. That is the flat spot, and this is the moment it is made.
+      const skidding = w.locked && braking && contactIds.has(t.id) && speedNowMps > 0.1
       return [
         t.id,
         {
@@ -395,9 +431,9 @@ function frameWheels(
           beadC: w.beadPeakC * progress,
           contact: contactIds.has(t.id),
           // Where the runway is touching it, in the tyre's own frame — its arbitrary clocking at
-          // touchdown, plus however far it has turned since.
-          contactDeg: since < 0 ? t.clockDeg : (t.clockDeg + contactDeg(spin.thetaRad)) % 360,
-          slipMps: since < 0 ? 0 : spin.slipMps,
+          // touchdown, plus however far it has turned since. Unless it is locked, in which case: here.
+          contactDeg: skidding ? w.flatSpotDeg : since < 0 ? t.clockDeg : (t.clockDeg + contactDeg(spin.thetaRad)) % 360,
+          slipMps: skidding ? speedNowMps : since < 0 ? 0 : spin.slipMps,
         },
       ]
     }),
@@ -658,14 +694,20 @@ function adjustedFlags(flags: readonly string[], profile: RolloutProfile, attitu
   // centreline with the wind on its side; carry more and you are scrubbing rubber for nothing. Before
   // this coupling existed you could dial 35 kt of crosswind against 0° of crab and nothing objected.
   const drift = driftAngleDeg(landing)
+  const xw = Math.abs(crosswindKt(landing))
   const uncorrected = drift + attitude.crabDeg
   if (Math.abs(uncorrected) > 3) {
     out.push(
-      Math.abs(attitude.crabDeg) < drift
-        ? `Drifting — ${landing.crosswindKt} kt of crosswind needs ${drift.toFixed(1)}° of crab and the aircraft is carrying ${(-attitude.crabDeg).toFixed(1)}°; the gear takes the difference as side load`
-        : `Over-crabbed by ${Math.abs(uncorrected).toFixed(1)}° — more side scrub than the ${landing.crosswindKt} kt crosswind calls for`,
+      Math.abs(attitude.crabDeg) < Math.abs(drift)
+        ? `Drifting — ${xw.toFixed(0)} kt of crosswind needs ${Math.abs(drift).toFixed(1)}° of crab and the aircraft is carrying ${Math.abs(attitude.crabDeg).toFixed(1)}°; the gear takes the difference as side load`
+        : `Over-crabbed by ${Math.abs(uncorrected).toFixed(1)}° — more side scrub than the ${xw.toFixed(0)} kt crosswind calls for`,
     )
   }
+
+  // A headwind is free runway, and it is worth saying so — the model spent its whole life unable to
+  // feel one, so the only thing wind could ever do was make things worse.
+  const hw = headwindKt(landing)
+  if (hw < -5) out.push(`Tailwind ${Math.abs(hw).toFixed(0)} kt — the aircraft touches down that much faster over the ground, and every energy term goes with the square`)
 
   // Hydroplaning. Named per tyre, because it *is* per tyre: the softest one gives up first, and one is
   // enough to start the slide. (The scalar model raises its own single-tyre version of this flag; the

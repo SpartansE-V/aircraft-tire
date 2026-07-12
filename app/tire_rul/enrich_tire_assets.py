@@ -23,6 +23,7 @@ import pandas as pd
 
 from app.tire_rul import paths
 from app.tire_rul.scan_annotations import (
+    MOCK_TYRES_DIR,
     SCAN_GROUPS,
     TREAD_COUNT,
     TireModelType,
@@ -61,7 +62,27 @@ def _sample_treads(
     return depths
 
 
+def _require_enrich_inputs() -> None:
+    """Fail fast with actionable paths — avoids a generic 'run make data' on DEV."""
+    if not paths.TIRES.exists():
+        raise FileNotFoundError(
+            f"Fleet dataset not found at {paths.TIRES}; run `make data` before enrich-scans."
+        )
+    missing = [
+        group_id
+        for group_id in SCAN_GROUPS
+        if not (MOCK_TYRES_DIR / group_id / "metadata.json").is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Mock-tyre scan packs missing for "
+            f"{', '.join(missing)} under {MOCK_TYRES_DIR}; "
+            "bake assets/mock-tyres/release into the image (see app/Dockerfile)."
+        )
+
+
 def enrich_tires(*, seed: int = 20260712) -> pd.DataFrame:
+    _require_enrich_inputs()
     for group_id in SCAN_GROUPS:
         write_group_annotations(group_id)
 

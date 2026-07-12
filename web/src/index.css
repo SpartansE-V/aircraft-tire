@@ -93,3 +93,25 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .scanline::after { animation: none; opacity: 0; }
 }
+
+/* The model surface.
+ *
+ * Everything else on this screen is either measured off a real tyre or computed by physics we can
+ * check. What comes back from the assessment API is neither: it is an uncalibrated, unvalidated,
+ * unauthorised demonstration model, forecasting a narrowbody it was never fitted to this aircraft.
+ *
+ * Its confidence is LOW in *every* response, forever — so a "LOW CONFIDENCE" badge would be on 100%
+ * of the time, and a warning that is always on is furniture within a day. The disclosure has to be
+ * structural instead: modelled numbers sit on a visibly different material to measured ones, and this
+ * hatch appears nowhere else in the app. If a screenshot of one tile is ambiguous about which kind of
+ * number it holds, this rule has failed.
+ */
+.model-surface {
+  border: 1px dashed var(--line-2);
+  background-color: color-mix(in srgb, var(--panel) 70%, transparent);
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--grid) 0 6px,
+    transparent 6px 12px
+  );
+}

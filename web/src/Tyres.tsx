@@ -79,7 +79,27 @@ export default function Tyres() {
 
   return (
     <div className="min-h-screen p-4 font-mono text-[var(--ink-2)] lg:p-6">
-      <Header status={st} theme={theme} onTheme={setTheme} path="/tyres" />
+      <Header status={st} theme={theme} onTheme={setTheme} path="/tyres" mockStatus />
+
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-widest">
+        <label className="flex items-center gap-2 text-[var(--ink-3)]">
+          Aircraft
+          <select
+            className="border border-[var(--line-2)] bg-[var(--panel)] px-2 py-1 text-[var(--ink)]"
+            value={tail ?? ''}
+            onChange={(e) => setTail(e.target.value)}
+          >
+            {(aircraftQ.data?.aircraft ?? []).map((a) => (
+              <option key={a.tail_number} value={a.tail_number}>
+                {a.tail_number} · {a.home_station}
+              </option>
+            ))}
+          </select>
+        </label>
+        <span className="text-[var(--ink-4)]">
+          {fleet.aircraft_type.replaceAll('_', ' ')} · {fleet.home_station}
+        </span>
+      </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-widest">
         <label className="flex items-center gap-2 text-[var(--ink-3)]">
@@ -213,6 +233,7 @@ export default function Tyres() {
   )
 }
 
+/** Top-down gear map. Colour carries status, but every wheel also shows a glyph in its tooltip. */
 function GearMap({
   tires,
   selected,
@@ -242,6 +263,7 @@ function GearMap({
         const [x, y] = POSITION_XY[pos]
         const s = SCAN_STATUS[t.scanStatus]
         const on = t.id === selected
+        const hue = s.hue
         return (
           <g key={t.id} onClick={() => onSelect(t.id)} className="cursor-pointer">
             <title>{`${t.id} · ${t.label} · ${s.text} · ${tireTypeById(t.modelType).name}`}</title>
@@ -251,8 +273,8 @@ function GearMap({
               width="8"
               height="12"
               rx="2"
-              fill={on ? s.hue : `${s.hue}33`}
-              style={{ stroke: on ? 'var(--ink)' : s.hue }}
+              fill={on ? hue : `${s.hue}33`}
+              style={{ stroke: on ? 'var(--ink)' : hue }}
               strokeWidth={on ? 1 : 0.6}
             />
             <text x={x} y={y + 13} textAnchor="middle" fontSize="4.5" style={{ fill: on ? 'var(--ink)' : 'var(--ink-4)' }}>

@@ -23,7 +23,10 @@ const landing = {
   gsKt: 138,
   brakeShare: 0.55,
   oatC: track.oatC,
-  crosswindKt: 12,
+  windKt: 14,
+  windDirDeg: (track.headingDeg + 40) % 360,
+  runwayHeadingDeg: track.headingDeg,
+  antiskid: true,
   surface: track.surface,
   elevFt: track.elevFt,
   runwayM: track.lengthM,
@@ -50,10 +53,10 @@ for (let i = 1; i < run.frames.length; i++) {
 }
 assert.ok(Math.abs(run.frames.at(-1)!.pose.xM - run.summary.stopDistM) < 0.5, 'final frame should land on summary stop distance')
 
-const levelNoWind = simulateLandingRun({ landing: { ...landing, crosswindKt: 0 }, attitude, track, tires: FLEET_TIRES, selectedTireId })
+const levelNoWind = simulateLandingRun({ landing: { ...landing, windKt: 0 }, attitude, track, tires: FLEET_TIRES, selectedTireId })
 assert.ok(Math.abs(levelNoWind.summary.perWheel.L1.peakLoadKN - levelNoWind.summary.perWheel.R1.peakLoadKN) < 1e-9, 'wings-level/no-wind loads should be side-symmetric')
 
-const banked = simulateLandingRun({ landing: { ...landing, crosswindKt: 0 }, attitude: { ...attitude, rollDeg: 8 }, track, tires: FLEET_TIRES, selectedTireId: 'R1' })
+const banked = simulateLandingRun({ landing: { ...landing, windKt: 0 }, attitude: { ...attitude, rollDeg: 8 }, track, tires: FLEET_TIRES, selectedTireId: 'R1' })
 assert.ok(banked.summary.perWheel.R1.peakLoadKN > banked.summary.perWheel.L1.peakLoadKN, 'positive bank should load the right gear')
 assert.ok(banked.summary.touchdownOrder.every((id) => id.startsWith('R')), 'positive bank should touch right mains first')
 
@@ -211,7 +214,53 @@ assert.ok(
 )
 assert.ok(levelNoWind.summary.perWheel.L5.impactArcDeg > 20 && levelNoWind.summary.perWheel.L5.impactArcDeg < 140, 'a real contact patch is tens of degrees of the circumference, not a point and not the whole tyre')
 
-const crabbed = simulateLandingRun({ landing: { ...landing, crosswindKt: 0 }, attitude: { ...attitude, crabDeg: 12 }, track, tires: FLEET_TIRES, selectedTireId })
+// --- FLAT-SPOTTING, per tyre. The wheel locks, stops turning, and the whole slide is ground off the
+// one arc it froze on. This is the difference from spin-up, where the tyre slides just as hard but is
+// *turning* while it does, smearing the abrasion round the circumference — which is exactly why a
+// normal landing does not flat-spot a tyre and a locked wheel does.
+const skidRun = simulateLandingRun({
+  landing: { ...landing, brakeShare: 1, surface: 'wet' as const, antiskid: false },
+  attitude,
+  track: { ...track, surface: 'wet' },
+  tires: FLEET_TIRES,
+  selectedTireId,
+})
+const rolledRun = simulateLandingRun({
+  landing: { ...landing, brakeShare: 1, surface: 'wet' as const, antiskid: true },
+  attitude,
+  track: { ...track, surface: 'wet' },
+  tires: FLEET_TIRES,
+  selectedTireId,
+})
+assert.ok(FLEET_TIRES.filter((t) => t.gear !== 'nose').every((t) => skidRun.summary.perWheel[t.id].locked), 'every braked wheel locks')
+assert.ok(FLEET_TIRES.filter((t) => t.gear === 'nose').every((t) => !skidRun.summary.perWheel[t.id].locked), 'the nose gear has no brakes and cannot lock')
+assert.ok(skidRun.summary.perWheel.L1.flatSpotMm > 3, `a locked main should be ground flat: ${skidRun.summary.perWheel.L1.flatSpotMm.toFixed(1)} mm`)
+// A flat spot cannot be deeper than the tyre is thick — and it must be capped against *this* tyre's
+// rubber, not the selected one's. Uncapped, the page cheerfully reported a 36.8 mm flat on a tyre
+// carrying 5.8 mm of tread, while the flag right beside it said 3.8 mm. Every tyre, every time.
+for (const t of FLEET_TIRES.filter((x) => x.gear !== 'nose')) {
+  const w = skidRun.summary.perWheel[t.id]
+  assert.ok(w.flatSpotMm <= Math.min(...t.grooves) + 2 + 1e-9, `${t.id}: a flat spot cannot be deeper than the tyre: ${w.flatSpotMm.toFixed(1)} mm into ${Math.min(...t.grooves).toFixed(1)} mm of tread`)
+  assert.equal(w.burst, true, `${t.id} should be reported burst, not carrying an impossible flat`)
+}
+// And no tyre may end the landing with a negative amount of rubber on it.
+assert.ok(skidRun.summary.grooveAfter >= 0, `groove after the event cannot be negative: ${skidRun.summary.grooveAfter.toFixed(2)} mm`)
+assert.equal(rolledRun.summary.perWheel.L1.flatSpotMm, 0, 'anti-skid means no flat spot at all')
+assert.ok(skidRun.summary.flags.some((f) => /burst|flat-spot/i.test(f)), 'and it has to say so')
+assert.equal(skidRun.summary.status, 'action', 'a scrapped tyre is actionable')
+
+// While it is locked, the contact patch STOPS moving round the tread — that is the whole mechanism.
+const skidFrames = skidRun.frames.filter((f) => f.phase === 'braking' && f.speedMps > 1)
+assert.ok(skidFrames.length > 5, 'there should be a braking phase to look at')
+assert.equal(new Set(skidFrames.map((f) => Math.round(f.wheel.L1.contactDeg))).size, 1, 'a locked wheel grinds ONE arc — the contact point must not move')
+assert.ok(skidFrames.every((f) => f.wheel.L1.slipMps > 1), 'and it is sliding the whole time, not rolling')
+// Where it stopped is where it grinds, and that is per tyre — the clocking is arbitrary.
+assert.equal(Math.round(skidFrames[0].wheel.L1.contactDeg), Math.round(skidRun.summary.perWheel.L1.flatSpotDeg), 'the flat is where the wheel froze')
+// A rolling wheel, by contrast, is a different arc every instant.
+const rollFrames = rolledRun.frames.filter((f) => f.phase === 'braking' && f.speedMps > 1)
+assert.ok(new Set(rollFrames.map((f) => Math.round(f.wheel.L1.contactDeg))).size > 3, 'a rolling wheel spreads its wear right round the tyre')
+
+const crabbed = simulateLandingRun({ landing: { ...landing, windKt: 0 }, attitude: { ...attitude, crabDeg: 12 }, track, tires: FLEET_TIRES, selectedTireId })
 const mainIds = FLEET_TIRES.filter((t) => t.gear !== 'nose').map((t) => t.id)
 const fleetScrub = (r: typeof run) => mainIds.reduce((a, id) => a + r.summary.perWheel[id].scrubMm, 0)
 // Crab costs the fleet rubber overall...
@@ -277,7 +326,8 @@ assert.equal(overrun.frames.at(-1)?.phase, 'overrun', 'short contaminated runway
 
 // --- CROSSWIND → CRAB. Before this coupling you could dial 35 kt of crosswind against 0° of crab and
 // the model would happily simulate a landing that cannot physically happen.
-const xwind = { ...landing, crosswindKt: 30, surface: 'dry' as const }
+// 30 kt straight across runway 263°: pure crosswind, zero headwind.
+const xwind = { ...landing, windKt: 30, windDirDeg: (track.headingDeg + 90) % 360, surface: 'dry' as const }
 const needed = driftAngleDeg(xwind)
 assert.ok(needed > 10 && needed < 16, `30 kt of crosswind at 138 kt needs a real crab angle: got ${needed.toFixed(1)}°`)
 
@@ -304,10 +354,26 @@ assert.ok(Math.abs(hydroplaneSpeedKt(215) - 132) < 2, `Horne's number should hol
 // A damp runway is NOT standing water — it must not aquaplane, only lose µ.
 assert.ok(!canHydroplane('wet'), 'a merely wet runway should not hydroplane — that is what its lower µ is for')
 
-const flooded = { ...landing, surface: 'contaminated' as const, runwayM: 4000 }
+// Still air. The default fixture carries a 10.7 kt headwind, and that alone is enough to pull the
+// groundspeed *below* the tyres' hydroplaning speed — which is not a broken fixture, it is the two
+// features meeting. Vp is a speed over the *ground*, and a headwind takes knots straight off that. So
+// a headwind is the cheapest protection from aquaplaning there is. Asserted immediately below, because
+// it fell out of the model rather than being designed in, and those are the ones worth pinning.
+const flooded = { ...landing, windKt: 0, surface: 'contaminated' as const, runwayM: 4000 }
 const floodedRun = simulateLandingRun({ landing: flooded, attitude, track: { ...track, surface: 'contaminated' }, tires: FLEET_TIRES, selectedTireId })
 assert.ok(floodedRun.summary.flags.some((f) => /Hydroplaning/.test(f)), 'standing water at touchdown speed should flag hydroplaning')
 assert.equal(floodedRun.summary.flags.filter((f) => /Hydroplaning/.test(f)).length, 1, 'hydroplaning should be said once, not twice')
+
+// Land the same flooded runway into a headwind and the tyres never come up onto the water at all.
+const intoWind = simulateLandingRun({
+  landing: { ...flooded, windKt: 20, windDirDeg: track.headingDeg },
+  attitude,
+  track: { ...track, surface: 'contaminated' },
+  tires: FLEET_TIRES,
+  selectedTireId,
+})
+assert.ok(!intoWind.summary.flags.some((f) => /Hydroplaning/.test(f)), 'a headwind should take the aircraft below its own hydroplaning speed')
+assert.ok(intoWind.summary.stopDistM < floodedRun.summary.stopDistM - 500, 'and the stop should collapse accordingly')
 
 // The product's entire argument, in one assertion: psi is a stop-distance number. Let one main down to
 // 160 psi — still inflated, still flying — and it starts aquaplaning 18 kt earlier than the rest,

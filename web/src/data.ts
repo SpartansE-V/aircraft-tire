@@ -90,8 +90,32 @@ export type Tire = {
   runways: { icao: string; code: number; surface: string; texture: number }[]
 }
 
+/**
+ * The defect vocabulary the assessment API accepts (`KnownDefect` in app/domain/simulation_schemas.py).
+ * Every member is *damage*. There is no member for ordinary tread wear, and that is deliberate: wear is
+ * already stated by tread depth, so a worn tyre is a number, not a defect.
+ */
+export type DefectCode =
+  | 'CUT'
+  | 'BULGE'
+  | 'SEPARATION'
+  | 'FLAT_SPOT'
+  | 'CHUNKING'
+  | 'EXPOSED_CORD'
+  | 'HEAT_DAMAGE'
+  | 'CONTAMINATION'
+  | 'FOD'
+
 export type Defect = {
   kind: 'wear' | 'damage' // different logistics response: monitor vs remove
+  /**
+   * What this defect is *called* by the API. Free text is for the human reading the card; this is what
+   * the model is told, so it is carried on the defect rather than parsed back out of `label` later.
+   *
+   * Absent on `kind: 'wear'` — see DefectCode. Any code sent to the API withholds the assessment
+   * (409 ASSESSMENT_WITHHELD): a damaged tyre is a job for a qualified inspector, not a forecast.
+   */
+  code?: DefectCode
   label: string
   severity: 'low' | 'med' | 'high'
   zone: string
@@ -157,12 +181,13 @@ function makeTire(i: number, [id, label, gear, role]: (typeof POSITIONS)[number]
   const grooves = Array.from({ length: 4 }, (_, g) => +(9.5 * (1 - wear) + (g === 0 || g === 3 ? -0.5 : 0.3) * r()).toFixed(2))
 
   const defects: Defect[] = []
+  // No code on the wear one: it is worn tread, which the API already hears as tread depth.
   if (Math.min(...grooves) < grooveLimit + 1.2)
     defects.push({ kind: 'wear', label: 'Shoulder wear past 80% of allowance', severity: 'med', zone: 'Tread · outboard shoulder', at: [0.71, 0, 0.71], r: 0.45 })
   if (r() > 0.55)
-    defects.push({ kind: 'damage', label: 'FOD cut, 14 mm, groove base', severity: r() > 0.6 ? 'high' : 'med', zone: 'Tread · groove 2', at: [-0.35, 0.15, 0.85], r: 0.3 })
+    defects.push({ kind: 'damage', code: 'CUT', label: 'FOD cut, 14 mm, groove base', severity: r() > 0.6 ? 'high' : 'med', zone: 'Tread · groove 2', at: [-0.35, 0.15, 0.85], r: 0.3 })
   if (r() > 0.78)
-    defects.push({ kind: 'damage', label: 'Sidewall bulge — carcass suspect', severity: 'high', zone: 'Sidewall · inboard', at: [-0.7, 0.36, 0.3], r: 0.3 })
+    defects.push({ kind: 'damage', code: 'BULGE', label: 'Sidewall bulge — carcass suspect', severity: 'high', zone: 'Sidewall · inboard', at: [-0.7, 0.36, 0.3], r: 0.3 })
 
   const landings: Landing[] = Array.from({ length: 10 }, (_, k) => ({
     flt: `AC${400 + i * 3 + k}`,
@@ -224,6 +249,16 @@ function makeTire(i: number, [id, label, gear, role]: (typeof POSITIONS)[number]
 }
 
 export const FLEET_TIRES: Tire[] = POSITIONS.map((p, i) => makeTire(i, p))
+
+/**
+ * The tyre's damage, in the words the assessment API knows. Wear defects drop out — they are tread depth.
+ *
+ * A non-empty result means the API will withhold the assessment. That is the answer, not a failure to get
+ * one: you do not forecast the next fifty cycles of a tyre with a cut in it, you send someone to look at it.
+ */
+export function knownDefects(t: Tire): DefectCode[] {
+  return [...new Set(t.defects.map((d) => d.code).filter((c) => c !== undefined))]
+}
 
 export function statusOf(t: Tire): Status {
   if (t.scanStatus === 'error') return 'action'
