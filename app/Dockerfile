@@ -7,9 +7,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-ARG OPENAI_API_KEY
-
-
 WORKDIR /app
 
 # opencv-python (pulled in by inference-sdk) needs libGL/glib at import time,
