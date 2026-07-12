@@ -7,6 +7,7 @@ import {
 } from './TireCards'
 import { Card, Field, Header, Kpi, Open, STATUS, useTheme } from './ui'
 import RemainingLifeCard from './rul/RemainingLifeCard'
+import TireImageCard from './TireImageCard'
 import { ApiError, useFleetAircraft, useFleetTires, type WheelPosition } from './rul/api'
 import { fleetTiresToDashboard } from './rul/fleetTires'
 import { POSITION_XY } from './rul/positions'
@@ -188,8 +189,12 @@ export default function Tyres() {
           </div>
         </div>
 
+        {/* right: remaining life (live RUL) + photo AI screen + TPMS + touchdown */}
         <div className="flex flex-col gap-3 lg:col-span-3">
           <RemainingLifeCard tire={tire} />
+
+          <TireImageCard id={`${fleet.tail_number}:${tire.id}`} aircraftId={fleet.tail_number} label={tire.id} />
+
           <PressureCard tire={tire} />
           <TouchdownCard tire={tire} />
         </div>

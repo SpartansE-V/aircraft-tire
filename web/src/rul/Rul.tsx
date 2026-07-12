@@ -4,7 +4,8 @@ import type { Status } from '../data'
 import { useWheelStatus, useWorklist, type WheelPosition } from './api'
 import { WheelDetail, WheelRulMap, WorklistTable, type WheelCell } from './RulCards'
 import PlanForecast from './PlanForecast'
-import { fmtDate } from './positions'
+import { fmtDate, POSITION_LABEL } from './positions'
+import TireImageCard from '../TireImageCard'
 
 const STATIONS = ['SGN', 'DAD', 'HAN'] as const
 const TOP_N_OPTIONS = [10, 20, 30, 50]
@@ -102,8 +103,8 @@ export default function Rul() {
           </Card>
         </div>
 
-        {/* right: the selected wheel's condition + forecast */}
-        <div className="lg:col-span-4">
+        {/* right: the selected wheel's condition + forecast + photo AI screen */}
+        <div className="flex flex-col gap-3 lg:col-span-4">
           <Card title="Wheel Remaining Useful Life Prediction" tag="GET /wheel/status">
             {selected ? (
               <SelectedWheel tail={selected.tail} position={selected.position} />
@@ -111,6 +112,14 @@ export default function Rul() {
               <p className="py-10 text-center text-xs text-[var(--ink-4)]">No wheel selected.</p>
             )}
           </Card>
+
+          {selected && (
+            <TireImageCard
+              id={`${selected.tail}:${selected.position}`}
+              aircraftId={selected.tail}
+              label={POSITION_LABEL[selected.position]}
+            />
+          )}
         </div>
       </div>
 

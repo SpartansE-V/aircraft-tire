@@ -1,0 +1,959 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tire RUL — POC Pitch</title>
+<style>
+  :root {
+    --font: "Helvetica Neue", "Neue Haas Grotesk Display", "Segoe UI", Helvetica, Arial, sans-serif;
+
+    --ink: #000d10;
+    --white: #ffffff;
+    --ash: #8e8e95;        /* muted — on dark bands and large text */
+    --ash-2: #5f6169;      /* readable muted on white */
+    --pebble: #d5d3d4;
+    --pebble-2: #e6e6e7;
+    --midnight: #0f0f1c;
+    --charcoal: #151623;
+    --clay: #bc7155;
+
+    --gray-band: #f6f6f7;
+    --sub-1: #eeeff0;      /* nested grayscale for AWS frames */
+    --sub-2: #e5e6e8;
+    --line-dark: #2a2b38;  /* hairlines on dark */
+
+    --page: 1200px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--white);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 18px;
+    font-weight: 400;
+    line-height: 1.61;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+
+  h1, h2, h3, p { margin: 0; }
+
+  /* ---------- bands ---------- */
+  .band { padding: 84px 0; }
+  .band > .inner { max-width: var(--page); margin: 0 auto; padding: 0 34px; }
+  .band-white { background: var(--white); }
+  .band-gray { background: var(--gray-band); }
+  .band-dark { background: var(--midnight); color: var(--white); }
+  .band-charcoal { background: var(--charcoal); color: var(--white); }
+
+  /* ---------- type ---------- */
+  .eyebrow {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ash-2);
+  }
+  .band-dark .eyebrow, .band-charcoal .eyebrow { color: var(--ash); }
+
+  .display {
+    font-weight: 700;
+    font-size: clamp(52px, 9.2vw, 118px);
+    line-height: 0.9;
+    letter-spacing: -0.032em;
+  }
+  h2.section {
+    font-weight: 700;
+    font-size: clamp(34px, 4.6vw, 52px);
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    max-width: 18ch;
+  }
+  .lead {
+    font-size: 20px;
+    line-height: 1.55;
+    color: var(--ink);
+    max-width: 60ch;
+  }
+  .band-dark .lead, .band-charcoal .lead { color: var(--white); }
+  .muted { color: var(--ash-2); }
+  .band-dark .muted, .band-charcoal .muted { color: var(--ash); }
+
+  .sec-head { display: flex; flex-direction: column; gap: 18px; margin-bottom: 52px; }
+  .sec-head .eyebrow { order: -1; }
+
+  /* ---------- buttons / pills ---------- */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    border-radius: 1000px;
+    padding: 15px 26px 16px;
+    font-family: var(--font);
+    font-size: 17px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform .18s ease, background .18s ease, color .18s ease;
+  }
+  @media (prefers-reduced-motion: reduce) { .pill { transition: none; } }
+  .pill:hover { transform: translateY(-1px); }
+  .pill-ink { background: var(--ink); color: var(--white); }
+  .pill-ink:hover { background: #16232a; }
+  .pill-ghost { background: transparent; color: var(--ink); border-color: var(--ink); }
+  .pill-ghost:hover { background: var(--ink); color: var(--white); }
+  .band-dark .pill-ghost, .band-charcoal .pill-ghost { color: var(--white); border-color: rgba(255,255,255,.5); }
+  .band-dark .pill-ghost:hover, .band-charcoal .pill-ghost:hover { background: var(--white); color: var(--ink); }
+  .pill-static { cursor: default; }
+  .pill-static:hover { transform: none; }
+
+  .cta-row { display: flex; gap: 14px; flex-wrap: wrap; }
+
+  /* ---------- nav ---------- */
+  .nav {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 30px 34px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark {
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: -0.03em;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .wordmark .reg { color: var(--clay); }
+  .navlinks { display: flex; align-items: center; gap: 30px; }
+  .navlinks a {
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--ink);
+    text-decoration: none;
+    letter-spacing: -0.01em;
+  }
+  .navlinks a:hover { color: var(--ash-2); }
+  .nav .pill { padding: 12px 22px; font-size: 16px; }
+  .menu-toggle { display: none; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    background: linear-gradient(168deg, #d9e3ea 0%, #eaeef0 44%, #f4ece4 100%);
+    padding-bottom: 0;
+  }
+  .hero-inner {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 66px 34px 0;
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 40px;
+    align-items: center;
+  }
+  .hero-copy { display: flex; flex-direction: column; gap: 26px; padding-bottom: 60px; }
+  .hero .display { color: var(--ink); }
+  .hero .lead { max-width: 46ch; }
+
+  .hero-visual { position: relative; align-self: stretch; display: flex; align-items: flex-end; justify-content: center; }
+  .hero-visual svg { width: 100%; max-width: 520px; height: auto; display: block; }
+  .datapill {
+    position: absolute;
+    top: 16%;
+    right: 2%;
+    background: var(--white);
+    border: 1px solid var(--pebble);
+    border-radius: 1000px;
+    padding: 10px 18px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .datapill span { color: var(--ash-2); font-weight: 400; }
+
+  .hero-strip {
+    border-top: 1px solid rgba(0,13,16,.14);
+    margin-top: 4px;
+  }
+  .hero-strip .inner {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 26px 34px 30px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 30px;
+  }
+  .stripitem { display: flex; flex-direction: column; gap: 4px; }
+  .stripitem .k { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ash-2); }
+  .stripitem .v { font-size: 18px; font-weight: 400; color: var(--ink); line-height: 1.4; }
+  .stripitem .v b { font-weight: 700; }
+
+  /* ---------- feature cards (hairline above title) ---------- */
+  .fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px 40px; }
+  .fgrid.two { grid-template-columns: repeat(2, 1fr); }
+  .fblock { display: flex; flex-direction: column; gap: 14px; padding-top: 20px; border-top: 1px solid var(--pebble); }
+  .band-dark .fblock, .band-charcoal .fblock { border-top-color: var(--line-dark); }
+  .fblock h3 { font-size: 23px; font-weight: 700; letter-spacing: -0.015em; line-height: 1.1; }
+  .fblock p { font-size: 18px; line-height: 1.55; color: var(--ash-2); }
+  .band-dark .fblock p, .band-charcoal .fblock p { color: var(--ash); }
+  .fblock .lbl { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ash-2); }
+  .band-dark .fblock .lbl, .band-charcoal .fblock .lbl { color: var(--ash); }
+
+  /* ---------- challenges (dark) ---------- */
+  .chgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 60px; }
+  .chitem {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 16px;
+    padding: 26px 0;
+    border-top: 1px solid var(--line-dark);
+    font-size: 20px;
+    line-height: 1.4;
+  }
+  .chitem .n { font-size: 15px; font-weight: 700; color: var(--ash); letter-spacing: .06em; padding-top: 5px; }
+
+  /* ---------- solution ---------- */
+  .clay-card {
+    background: var(--clay);
+    color: var(--white);
+    padding: 53px 59px;
+    display: grid;
+    grid-template-columns: 1.1fr 0.9fr;
+    gap: 40px;
+    align-items: start;
+    margin-bottom: 40px;
+  }
+  .clay-card .lbl { font-size: 13px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.8); }
+  .clay-card h3 { font-size: clamp(30px, 3.4vw, 37px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.02; margin-top: 16px; }
+  .clay-card p { font-size: 18px; line-height: 1.55; color: rgba(255,255,255,.9); margin-top: 18px; }
+  .claychips { display: flex; flex-wrap: wrap; gap: 10px; }
+  .claychip {
+    border: 1px solid rgba(255,255,255,.55);
+    border-radius: 1000px;
+    padding: 9px 16px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .clay-steps { display: flex; flex-direction: column; gap: 0; }
+  .clay-step { padding: 15px 0; border-top: 1px solid rgba(255,255,255,.32); font-size: 16px; line-height: 1.4; }
+  .clay-step b { font-weight: 700; }
+  .clay-step:first-child { border-top: none; padding-top: 0; }
+
+  .uc-lbl { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ash-2); }
+  .whyline {
+    margin-top: 48px;
+    padding-top: 26px;
+    border-top: 1px solid var(--pebble);
+    font-size: clamp(23px, 2.6vw, 30px);
+    font-weight: 700;
+    letter-spacing: -0.018em;
+    line-height: 1.2;
+    max-width: 30ch;
+  }
+  .whyline span { color: var(--ash-2); }
+
+  /* ---------- diagrams (monochrome) ---------- */
+  .dwrap { overflow-x: auto; border: 1px solid var(--pebble); background: var(--white); }
+  .band-gray .dwrap { border-color: var(--pebble); }
+  .diagram { min-width: 880px; padding: 30px; display: flex; flex-direction: column; gap: 18px; }
+
+  .dg-row { display: flex; align-items: center; gap: 10px; }
+  .dg-row.center { justify-content: center; }
+  .dg-col { display: flex; flex-direction: column; gap: 10px; }
+
+  .node {
+    background: var(--white);
+    border: 1px solid var(--pebble);
+    padding: 11px 15px;
+    min-width: 0;
+  }
+  .node .t { font-size: 15px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; color: var(--ink); }
+  .node .s { font-size: 13px; color: var(--ash-2); margin-top: 3px; line-height: 1.35; }
+  .node.grow { flex: 1; }
+  .node.ml { border: 1.5px solid var(--ink); }
+  .node.ai { background: var(--ink); border-color: var(--ink); }
+  .node.ai .t { color: var(--white); }
+  .node.ai .s { color: #a6a8b2; }
+
+  .arr { color: var(--ash-2); font-size: 15px; flex: none; user-select: none; }
+  .dnote { font-size: 13px; color: var(--ash-2); }
+  .dnote.dashed { border-bottom: 1px dashed var(--ink); padding-bottom: 2px; }
+  .dcaption { font-size: 15px; color: var(--ash-2); line-height: 1.5; }
+
+  .uc-head {
+    font-size: 13px; font-weight: 700; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--ash-2); border-top: 1px solid var(--pebble); padding-top: 15px;
+  }
+  .uc-head b { color: var(--ink); }
+
+  .chiprow { display: flex; gap: 9px; flex-wrap: wrap; }
+  .chip {
+    font-size: 14px; font-weight: 700; letter-spacing: -0.01em;
+    background: var(--white); border: 1px solid var(--pebble);
+    border-radius: 1000px; padding: 7px 15px; color: var(--ink);
+  }
+
+  .agentbox { background: var(--ink); padding: 16px 18px; }
+  .agentbox .t { color: var(--white); font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+  .agentbox .tools { display: flex; gap: 9px; margin-top: 12px; flex-wrap: wrap; }
+  .agentbox .tools .chip { background: transparent; color: var(--white); border-color: rgba(255,255,255,.5); }
+
+  .legend {
+    display: flex; gap: 20px; flex-wrap: wrap; align-items: center;
+    border-top: 1px solid var(--pebble); padding-top: 15px;
+    font-size: 14px; color: var(--ash-2);
+  }
+  .legend .sw { display: inline-block; width: 15px; height: 15px; vertical-align: -3px; margin-right: 7px; }
+  .legend .sw.ai { background: var(--ink); }
+  .legend .sw.ml { background: var(--white); border: 1.5px solid var(--ink); }
+  .legend .sw.data { background: var(--white); border: 1px solid var(--pebble); }
+  .legend .sw.pub { background: var(--sub-1); border: 1px solid var(--pebble); }
+  .legend .sw.priv { background: var(--sub-2); border: 1px solid var(--pebble); }
+  .legend .sw.dash { background: var(--white); border: 1.5px dashed var(--ink); }
+  .legend .line { display: inline-block; width: 24px; border-top: 1.5px dashed var(--ink); vertical-align: 4px; margin-right: 7px; }
+
+  /* ---------- AWS frames (grayscale) ---------- */
+  .frame { border: 1px solid var(--pebble); padding: 14px; }
+  .frame > .flabel {
+    font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    margin-bottom: 11px; display: block; color: var(--ink);
+  }
+  .frame > .flabel .mut { color: var(--ash-2); font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 13px; }
+  .f-cloud { background: var(--white); }
+  .f-cicd { border: 1.5px dashed var(--ink); }
+  .f-ecr { border: 1.5px dashed var(--ink); }
+  .f-ai { background: var(--ink); }
+  .f-ai > .flabel { color: var(--white); }
+  .f-ai .node { background: var(--ink); border-color: rgba(255,255,255,.35); }
+  .f-ai .node .t { color: var(--white); }
+  .f-ai .node .s { color: #a6a8b2; }
+  .f-region { border: 1.5px dashed var(--ink); }
+  .f-vpc { background: var(--white); border-color: var(--ink); }
+  .f-public { background: var(--sub-1); border-color: transparent; }
+  .f-private { background: var(--sub-2); border-color: transparent; }
+  .f-ecs { border: 1.5px dashed var(--ink); background: transparent; }
+  .f-tf { border: 1px dashed var(--pebble); }
+
+  .svc { border: 1px solid var(--pebble); padding: 11px 13px; background: var(--white); flex: 1; }
+  .svc .sg { font-size: 10.5px; font-weight: 700; color: var(--ash-2); letter-spacing: .08em; text-transform: uppercase; }
+  .svc .t { font-size: 14px; font-weight: 700; margin-top: 5px; letter-spacing: -0.01em; }
+  .svc .s { font-size: 12.5px; color: var(--ash-2); margin-top: 4px; line-height: 1.4; }
+
+  .awsgrid { display: grid; grid-template-columns: 1fr 236px; gap: 14px; align-items: start; }
+  .flowlist { display: flex; flex-direction: column; gap: 7px; font-size: 15px; color: var(--ash-2); line-height: 1.5; }
+  .flowlist b { color: var(--ink); font-weight: 700; }
+
+  /* ---------- pilot (dark) ---------- */
+  .pilot-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 50px; align-items: start; }
+  .scopelist { display: flex; flex-direction: column; }
+  .scopeitem {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 22px 0; border-top: 1px solid var(--line-dark); font-size: 20px; line-height: 1.35;
+  }
+  .scopeitem .m { flex: none; font-size: 14px; font-weight: 700; color: var(--ash); letter-spacing: .06em; }
+  .scopeitem .maps { margin-left: auto; font-size: 13px; font-weight: 700; letter-spacing: .1em; color: var(--ash); flex: none; }
+  .sidepanel h3 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+  .sidepanel p { font-size: 18px; color: var(--ash); margin-top: 12px; line-height: 1.55; }
+  .sidepanel .capchips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .capchip { border: 1px solid rgba(255,255,255,.4); border-radius: 1000px; padding: 9px 16px; font-size: 14px; font-weight: 700; color: var(--white); }
+
+  /* ---------- build direction ---------- */
+  .build-statement {
+    font-size: clamp(26px, 3.4vw, 40px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.14;
+    max-width: 22ch;
+  }
+  .build-statement em { font-style: normal; color: var(--ash-2); }
+  .buildchips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
+
+  /* ---------- footer ---------- */
+  .footer { background: var(--ink); color: var(--white); padding: 70px 0 46px; }
+  .footer .inner { max-width: var(--page); margin: 0 auto; padding: 0 34px; }
+  .footer-mark { font-size: clamp(60px, 12vw, 150px); font-weight: 700; letter-spacing: -0.04em; line-height: 0.9; }
+  .footer-mark .reg { color: var(--clay); }
+  .footer-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-top: 34px; padding-top: 30px; border-top: 1px solid var(--line-dark); }
+  .footer-row .note { font-size: 14px; color: var(--ash); letter-spacing: .06em; max-width: 52ch; line-height: 1.5; }
+  .footer-row .tag { font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ash); }
+
+  /* ---------- reveal ---------- */
+  .reveal { opacity: 0; transform: translateY(16px); transition: opacity .6s ease, transform .6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 900px) {
+    .hero-inner { grid-template-columns: 1fr; padding-top: 40px; }
+    .hero-visual { max-width: 440px; margin: 0 auto; }
+    .hero-copy { padding-bottom: 40px; }
+    .fgrid, .fgrid.two { grid-template-columns: 1fr 1fr; }
+    .clay-card { grid-template-columns: 1fr; gap: 28px; padding: 40px 34px; }
+    .pilot-grid { grid-template-columns: 1fr; gap: 34px; }
+    .awsgrid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 680px) {
+    .band { padding: 60px 0; }
+    .navlinks { display: none; }
+    .menu-toggle { display: inline-flex; }
+    .chgrid, .chiprow-2 { grid-template-columns: 1fr; }
+    .chgrid { display: block; }
+    .hero-strip .inner { grid-template-columns: 1fr; gap: 20px; }
+    .fgrid, .fgrid.two { grid-template-columns: 1fr; }
+    .datapill { top: 8%; right: 0; font-size: 13px; padding: 8px 14px; }
+  }
+
+  /* ---------- mobile menu (details) ---------- */
+  details.mmenu { position: relative; }
+  details.mmenu > summary {
+    list-style: none; cursor: pointer;
+    width: 46px; height: 46px; border-radius: 50%;
+    background: var(--ink);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  details.mmenu > summary::-webkit-details-marker { display: none; }
+  details.mmenu > summary svg { width: 20px; height: 20px; }
+  details.mmenu[open] > .mmenu-panel {
+    position: absolute; right: 0; top: 54px; z-index: 20;
+    background: var(--white); border: 1px solid var(--pebble);
+    padding: 10px 8px; display: flex; flex-direction: column; gap: 4px; min-width: 190px;
+  }
+  details.mmenu .mmenu-panel a { text-decoration: none; color: var(--ink); font-size: 18px; padding: 9px 14px; }
+  details.mmenu .mmenu-panel a:hover { background: var(--gray-band); }
+</style>
+
+<!-- ==================== HERO ==================== -->
+<section class="hero" id="top">
+  <nav class="nav">
+    <a class="wordmark" href="#top">Tire RUL<span class="reg">.</span></a>
+    <div class="navlinks">
+      <a href="#problem">Problem</a>
+      <a href="#solution">Solution</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#pilot">Pilot</a>
+      <a class="pill pill-ink" href="#pilot">Pilot scope</a>
+    </div>
+    <details class="mmenu menu-toggle">
+      <summary aria-label="Menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </summary>
+      <div class="mmenu-panel">
+        <a href="#problem">Problem</a>
+        <a href="#solution">Solution</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#pilot">Pilot</a>
+      </div>
+    </details>
+  </nav>
+
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <span class="eyebrow">Proof of Concept — Predictive Maintenance</span>
+      <h1 class="display">Beyond<br>inspection.</h1>
+      <p class="lead">Predict aircraft tire remaining useful life — so maintenance teams cut
+      AOG risk, emergency logistics, and idle inventory. Reactive checks, replaced by
+      forecast-driven planning.</p>
+      <div class="cta-row">
+        <a class="pill pill-ink" href="#architecture">Explore the architecture</a>
+        <a class="pill pill-ghost" href="#pilot">See the pilot scope</a>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <div class="datapill">RUL 142 cycles <span>· ±11 · fly</span></div>
+      <svg viewBox="0 0 520 520" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Aircraft tire, reconstructed in 3D">
+        <defs>
+          <radialGradient id="tire" cx="42%" cy="38%" r="72%">
+            <stop offset="0%" stop-color="#33343f"/>
+            <stop offset="55%" stop-color="#15161f"/>
+            <stop offset="100%" stop-color="#000d10"/>
+          </radialGradient>
+          <radialGradient id="hub" cx="42%" cy="38%" r="70%">
+            <stop offset="0%" stop-color="#3a3b47"/>
+            <stop offset="100%" stop-color="#0f0f1c"/>
+          </radialGradient>
+        </defs>
+        <!-- ground shadow -->
+        <ellipse cx="262" cy="486" rx="176" ry="20" fill="#000d10" opacity="0.10"/>
+        <!-- tire body -->
+        <circle cx="260" cy="252" r="232" fill="url(#tire)"/>
+        <!-- tread blocks -->
+        <circle cx="260" cy="252" r="221" fill="none" stroke="#2b2c39" stroke-width="20" stroke-dasharray="13 15"/>
+        <!-- tread grooves -->
+        <circle cx="260" cy="252" r="205" fill="none" stroke="#0a0b14" stroke-width="2"/>
+        <circle cx="260" cy="252" r="197" fill="none" stroke="#3a3b47" stroke-width="1"/>
+        <!-- sidewall -->
+        <circle cx="260" cy="252" r="188" fill="#0f0f1c"/>
+        <circle cx="260" cy="252" r="188" fill="none" stroke="#3c3d49" stroke-width="1.5"/>
+        <circle cx="260" cy="252" r="150" fill="none" stroke="#2a2b36" stroke-width="1"/>
+        <!-- hub -->
+        <circle cx="260" cy="252" r="118" fill="url(#hub)"/>
+        <circle cx="260" cy="252" r="118" fill="none" stroke="#454653" stroke-width="1.5"/>
+        <!-- bolts -->
+        <g fill="#0a0b12" stroke="#4a4b57" stroke-width="1.2">
+          <circle cx="260" cy="170" r="10"/>
+          <circle cx="318" cy="194" r="10"/>
+          <circle cx="342" cy="252" r="10"/>
+          <circle cx="318" cy="310" r="10"/>
+          <circle cx="260" cy="334" r="10"/>
+          <circle cx="202" cy="310" r="10"/>
+          <circle cx="178" cy="252" r="10"/>
+          <circle cx="202" cy="194" r="10"/>
+        </g>
+        <!-- center cap -->
+        <circle cx="260" cy="252" r="40" fill="#e8e6e3"/>
+        <circle cx="260" cy="252" r="40" fill="none" stroke="#cfcdca" stroke-width="1"/>
+        <circle cx="260" cy="252" r="15" fill="#0f0f1c"/>
+      </svg>
+    </div>
+  </div>
+
+  <div class="hero-strip">
+    <div class="inner">
+      <div class="stripitem"><span class="k">Forecast</span><span class="v">RUL per wheel — <b>cycles left ± CI</b> and wear-to-limit dates.</span></div>
+      <div class="stripitem"><span class="k">Prevent</span><span class="v">Risk alerts <b>before</b> AOG events and emergency logistics.</span></div>
+      <div class="stripitem"><span class="k">Plan</span><span class="v">Spare inventory and maintenance slots <b>ahead of demand</b>.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PROBLEM ==================== -->
+<section class="band band-white reveal" id="problem">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="eyebrow">The problem</span>
+      <h2 class="section">Tires are the highest-frequency consumable. And the least predictable.</h2>
+      <p class="lead muted">Aircraft tires are among the most frequently replaced components in airline
+      operations — yet replacement planning is still reactive.</p>
+    </div>
+    <div class="fgrid">
+      <div class="fblock">
+        <h3>Unexpected wear is expensive.</h3>
+        <p>A tire that wears faster than expected means delays, Aircraft-on-Ground events,
+        emergency logistics, and rising maintenance cost.</p>
+      </div>
+      <div class="fblock">
+        <h3>Forecasting is limited.</h3>
+        <p>Current capability gives little predictive visibility into remaining tire life,
+        so planning stays reactive and inventory stays inefficient.</p>
+      </div>
+      <div class="fblock">
+        <h3>Data sits unused.</h3>
+        <p>Years of inspection records, defect logs, and operational data exist — but are
+        not leveraged for forecasting.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== CHALLENGES (dark) ==================== -->
+<section class="band band-dark reveal">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="eyebrow">Current challenges</span>
+      <h2 class="section">Where today's process breaks down.</h2>
+    </div>
+    <div class="chgrid">
+      <div class="chitem"><span class="n">01</span><span>Tire replacement decisions rely heavily on manual inspections.</span></div>
+      <div class="chitem"><span class="n">02</span><span>No predictive visibility into remaining tire life.</span></div>
+      <div class="chitem"><span class="n">03</span><span>Spare tire inventory and logistics are hard to plan.</span></div>
+      <div class="chitem"><span class="n">04</span><span>Elevated risk of unexpected AOG situations.</span></div>
+      <div class="chitem"><span class="n">05</span><span>Historical inspection records are not fully leveraged for forecasting.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== SOLUTION ==================== -->
+<section class="band band-white reveal" id="solution">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="eyebrow">Proposed solution</span>
+      <h2 class="section">See the tire in 3D. Predict its life. Decide with confidence.</h2>
+      <p class="lead muted">Five use cases in one Tire Ops web app: computer-vision inspection rebuilt in 3D,
+      a VLM that reads damage like an engineer, time-series RUL prediction from sensor data,
+      next-flight wear simulation, and an agentic assistant that ties it together.</p>
+    </div>
+
+    <!-- featured clay card (single accent) -->
+    <div class="clay-card">
+      <div>
+        <span class="lbl">Flagship capability — UC2</span>
+        <h3>3D damage inspection.</h3>
+        <p>Multi-angle photos are fitted to a fixed tire mesh to rebuild each tire in 3D.
+        Segmentation measures cracks and groove depth as geometry — not guesswork — and a
+        VLM writes a severity report grounded in the manuals.</p>
+        <div class="claychips" style="margin-top:24px;">
+          <span class="claychip">Computer vision</span>
+          <span class="claychip">3D reconstruction</span>
+          <span class="claychip">VLM assessment</span>
+        </div>
+      </div>
+      <div class="clay-steps">
+        <div class="clay-step"><b>01 · Photo upload</b> — multi-angle views</div>
+        <div class="clay-step"><b>02 · 3D reconstruction</b> — render tire mesh</div>
+        <div class="clay-step"><b>03 · Damage detection</b> — cracks &amp; groove depth</div>
+        <div class="clay-step"><b>04 · Highlight</b> — overlay on the 3D mesh</div>
+        <div class="clay-step"><b>05 · VLM report</b> — severity + comment</div>
+      </div>
+    </div>
+
+    <div class="fgrid two">
+      <div class="fblock">
+        <span class="uc-lbl">UC1 · Dashboard</span>
+        <h3>Fleet tire dashboard.</h3>
+        <p>Fleet status, RUL ranking, damage alerts, and the MEL watch-list — the whole fleet
+        on one screen, worst wheels first.</p>
+      </div>
+      <div class="fblock">
+        <span class="uc-lbl">UC3 · Simulation</span>
+        <h3>Next-flight simulation.</h3>
+        <p>Route, load, and runway in — projected post-flight wear out. A physics + ML model
+        checks safety before dispatch.</p>
+      </div>
+      <div class="fblock">
+        <span class="uc-lbl">UC4 · Prediction</span>
+        <h3>Remaining-life prediction.</h3>
+        <p>Usage, defects, and sensor parameters feed a time-series RUL model: cycles left ± CI.
+        A decision agent recommends fly / monitor / replace.</p>
+      </div>
+      <div class="fblock">
+        <span class="uc-lbl">UC5 · Assistant</span>
+        <h3>Engineer chatbot.</h3>
+        <p>An agent with tools — KB search, SQL records, RUL API, Sim API — answers engineers
+        with citations and cuts lookup work.</p>
+      </div>
+    </div>
+
+    <p class="whyline">Why 3D + VLM matters: geometric crack and groove-depth measurement makes
+    both the human assessment and the downstream RUL prediction <span>materially more accurate.</span></p>
+  </div>
+</section>
+
+<!-- ==================== ARCHITECTURE — FUNCTIONAL ==================== -->
+<section class="band band-white reveal" id="architecture">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="eyebrow">Architecture — Functional</span>
+      <h2 class="section">How the five use cases fit together.</h2>
+      <p class="lead muted">One web app for engineers, ML services for vision and prediction, agentic AI
+      for reports, decisions, and chat — all sharing one data &amp; knowledge layer.</p>
+    </div>
+
+    <div class="dwrap">
+      <div class="diagram">
+        <div class="dg-row center">
+          <div class="node"><div class="t">Engineer</div></div>
+          <span class="arr">→</span>
+          <div class="node"><div class="t">Tire Ops web app</div></div>
+        </div>
+        <div class="dg-row center">
+          <div class="chiprow">
+            <span class="chip">1 Dashboard</span>
+            <span class="chip">2 Inspection</span>
+            <span class="chip">3 Simulation</span>
+            <span class="chip">4 RUL</span>
+            <span class="chip">5 Chatbot</span>
+          </div>
+        </div>
+
+        <div class="uc-head"><b>UC1</b> · Fleet tire dashboard</div>
+        <div class="chiprow">
+          <span class="chip">Fleet status</span>
+          <span class="chip">RUL ranking</span>
+          <span class="chip">Damage alerts</span>
+          <span class="chip">MEL watch-list</span>
+        </div>
+
+        <div class="uc-head"><b>UC2</b> · 3D damage inspection</div>
+        <div class="dg-row">
+          <div class="node grow"><div class="t">Photo upload</div><div class="s">multi-angle views</div></div>
+          <span class="arr">→</span>
+          <div class="node ml grow"><div class="t">3D reconstruction</div><div class="s">render tire mesh</div></div>
+          <span class="arr">→</span>
+          <div class="node ml grow"><div class="t">Damage detection</div><div class="s">segmentation · cracks &amp; groove depth</div></div>
+        </div>
+        <div class="dg-row">
+          <div class="node grow"><div class="t">Highlight damage</div><div class="s">overlay on 3D mesh</div></div>
+          <span class="arr">→</span>
+          <div class="node ai grow"><div class="t">VLM damage report</div><div class="s">severity + comment</div></div>
+          <span class="dnote dashed">⇠ RAG: manuals &amp; limits</span>
+        </div>
+
+        <div class="uc-head"><b>UC3</b> · Next-flight simulation</div>
+        <div class="dg-row">
+          <div class="node grow"><div class="t">Flight plan input</div><div class="s">route · load · runway</div></div>
+          <span class="arr">→</span>
+          <div class="node ml grow"><div class="t">Wear simulation</div><div class="s">physics + ML model</div></div>
+          <span class="arr">→</span>
+          <div class="node grow"><div class="t">Projected state</div><div class="s">post-flight wear</div></div>
+        </div>
+
+        <div class="uc-head"><b>UC4</b> · Remaining-life prediction <span style="color:var(--ash-2);font-weight:400;letter-spacing:0;text-transform:none;">· takes projected wear from UC3</span></div>
+        <div class="dg-row">
+          <div class="node grow"><div class="t">Feature builder</div><div class="s">usage · defects · sensor data</div></div>
+          <span class="arr">→</span>
+          <div class="node ml grow"><div class="t">RUL model</div><div class="s">time-series · cycles left ± CI</div></div>
+          <span class="arr">→</span>
+          <div class="node ai grow"><div class="t">Decision agent</div><div class="s">fly / monitor / replace</div></div>
+          <span class="dnote dashed">⇠ RAG: manuals &amp; limits</span>
+        </div>
+
+        <div class="uc-head"><b>UC5</b> · Engineer chatbot</div>
+        <div class="agentbox">
+          <div class="t">Chat agent — tool-use loop, cited answers</div>
+          <div class="tools">
+            <span class="chip">KB search (RAG)</span>
+            <span class="chip">SQL records</span>
+            <span class="chip">RUL API</span>
+            <span class="chip">Sim API</span>
+          </div>
+        </div>
+
+        <div class="uc-head">Shared data &amp; knowledge layer</div>
+        <div class="dg-row">
+          <div class="node grow"><div class="t">Tech publications</div><div class="s">AMM · MEL · CDL · TSM</div></div>
+          <span class="arr">→</span>
+          <div class="node ai grow"><div class="t">Ingestion agent</div><div class="s">parse · chunk · embed</div></div>
+          <span class="arr">→</span>
+          <div class="node grow"><div class="t">Vector KB</div><div class="s">embeddings index · RAG source</div></div>
+        </div>
+        <div class="dg-row">
+          <span class="dnote dashed">UC2 defect records ⇢</span>
+          <div class="node grow"><div class="t">Operational data</div><div class="s">defect &amp; MX records</div></div>
+          <span class="arr">→</span>
+          <div class="node grow"><div class="t">ETL / features</div><div class="s">clean · join · derive</div></div>
+          <span class="arr">→</span>
+          <div class="node grow"><div class="t">Ops DB</div><div class="s">feature store</div></div>
+        </div>
+        <div class="dcaption">Dashed notes mark retrieval &amp; record flows: the VLM report and decision agent read the
+        Vector KB (RAG), and inspection defect records feed back into operational data.</div>
+
+        <div class="legend">
+          <span><span class="sw ai"></span>agentic AI</span>
+          <span><span class="sw ml"></span>ML service</span>
+          <span><span class="sw data"></span>app / data</span>
+          <span><span class="line"></span>retrieval / records</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== ARCHITECTURE — AWS ==================== -->
+<section class="band band-gray reveal">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="eyebrow">Architecture — Deployment on AWS</span>
+      <h2 class="section">Runs on ECS Fargate. Deployed by Terraform + GitHub Actions.</h2>
+      <p class="lead muted">Three containerized services behind their own load balancers in
+      ap-southeast-1, with OIDC-based CI/CD — no long-lived AWS keys.</p>
+    </div>
+
+    <div class="dwrap">
+      <div class="diagram">
+        <div class="dg-row">
+          <div class="node"><div class="t">Developers</div><div class="s">push / merge PR to main</div></div>
+          <span class="arr">→</span>
+          <div class="node grow"><div class="t">GitHub Actions</div><div class="s">infra.yml + deploy-containers.yml</div></div>
+          <span class="dnote dashed">OIDC assume-role → build &amp; push images → deploy</span>
+        </div>
+
+        <div class="frame f-cloud">
+          <span class="flabel">AWS Cloud</span>
+          <div class="dg-row" style="align-items: stretch;">
+            <div class="frame f-cicd" style="flex:1;">
+              <span class="flabel">CI/CD (OIDC)</span>
+              <div class="node"><div class="t">IAM Role</div><div class="s">aircraft-tire-github-actions-deploy</div></div>
+            </div>
+            <div class="frame f-ecr" style="flex:2;">
+              <span class="flabel">Amazon ECR <span class="mut">immutable tags · scan-on-push</span></span>
+              <div class="dg-row">
+                <div class="node grow"><div class="s">aircraft-tire</div></div>
+                <div class="node grow"><div class="s">aircraft-tire-web</div></div>
+                <div class="node grow"><div class="s">3d-reconstructor</div></div>
+              </div>
+            </div>
+            <div class="frame f-ai" style="flex:1;">
+              <span class="flabel">Amazon Bedrock</span>
+              <div class="node"><div class="t">Analysis agent</div><div class="s">VLM · decision · chat</div></div>
+            </div>
+          </div>
+
+          <div style="height:14px;"></div>
+
+          <div class="frame f-region">
+            <span class="flabel">Region · ap-southeast-1</span>
+            <div class="awsgrid">
+              <div class="frame f-vpc">
+                <span class="flabel">VPC · 10.42.0.0/16 · aircraft-tire-vpc</span>
+                <div class="dg-row" style="margin-bottom:12px;">
+                  <div class="node"><div class="t">Users</div></div>
+                  <span class="arr">→</span>
+                  <div class="node"><div class="t">Internet Gateway</div></div>
+                  <span class="dnote">→ ALBs below</span>
+                </div>
+
+                <div class="frame f-public">
+                  <span class="flabel">Public subnets · 10.42.0.0/24 (AZ-a) · 10.42.1.0/24 (AZ-b)</span>
+                  <div class="dg-row">
+                    <div class="node grow"><div class="t">ALB</div><div class="s">aircraft-tire-alb</div></div>
+                    <div class="node grow"><div class="t">ALB</div><div class="s">aircraft-tire-web-alb</div></div>
+                    <div class="node grow"><div class="t">ALB</div><div class="s">aircraft-tire-recon-alb</div></div>
+                  </div>
+                  <div class="dg-row" style="margin-top:10px;">
+                    <div class="node"><div class="t">NAT GW</div><div class="s">egress for private tasks</div></div>
+                    <span class="dnote">→ image pulls from ECR · Bedrock calls</span>
+                  </div>
+                </div>
+
+                <div class="dg-row center" style="margin:6px 0;">
+                  <span class="dnote">↓ &nbsp;each ALB forwards to its own ECS service&nbsp; ↓</span>
+                </div>
+
+                <div class="frame f-private">
+                  <span class="flabel">Private subnets · 10.42.100.0/24 (AZ-a) · 10.42.101.0/24 (AZ-b)</span>
+                  <div class="frame f-ecs">
+                    <span class="flabel">ECS Cluster · aircraft-tire-cluster <span class="mut">Fargate · Container Insights</span></span>
+                    <div class="dg-row" style="align-items: stretch;">
+                      <div class="svc">
+                        <div class="sg">SG: tasks</div>
+                        <div class="t">aircraft-tire-service</div>
+                        <div class="s">craft-detector · FastAPI<br>damage detection API</div>
+                      </div>
+                      <div class="svc">
+                        <div class="sg">SG: tasks</div>
+                        <div class="t">aircraft-tire-web-service</div>
+                        <div class="s">web · Vite build + nginx<br>Tire Ops web app</div>
+                      </div>
+                      <div class="svc">
+                        <div class="sg">SG: tasks</div>
+                        <div class="t">3d-reconstructor-service</div>
+                        <div class="s">3d-reconstructor · MASt3R<br>3D reconstruction</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="dg-col">
+                <div class="frame f-tf">
+                  <span class="flabel">Terraform state</span>
+                  <div class="dg-col">
+                    <div class="node"><div class="t">S3</div><div class="s">aircraft-tire-tfstate-*</div></div>
+                    <div class="node"><div class="t">DynamoDB</div><div class="s">aircraft-tire-tfstate-lock</div></div>
+                  </div>
+                </div>
+                <div class="node"><div class="t">S3 uploads</div><div class="s">aircraft-tire-uploads-*<br>tire photos</div></div>
+                <div class="node"><div class="t">CloudWatch Logs</div><div class="s">/ecs/aircraft-tire*</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:14px;"></div>
+
+          <div class="flowlist">
+            <span><b>Users</b> → Internet Gateway → per-service ALB → ECS task (private subnet)</span>
+            <span><b>Tasks</b> → NAT Gateway → pull images from ECR · call Bedrock analysis agent</span>
+            <span><b>Tasks</b> → S3 uploads (tire photos) · CloudWatch Logs (observability)</span>
+            <span><b>GitHub Actions</b> → OIDC → IAM deploy role → ECR push + ECS deploy · Terraform state in S3/DynamoDB</span>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span><span class="sw pub"></span>public subnets</span>
+          <span><span class="sw priv"></span>private subnets</span>
+          <span><span class="sw dash"></span>dashed = logical boundary (CI/CD · ECR · region · ECS)</span>
+          <span><span class="sw ai"></span>agentic AI (Bedrock)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== PILOT (dark) ==================== -->
+<section class="band band-charcoal reveal" id="pilot">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="eyebrow">Pilot scope</span>
+      <h2 class="section">What the POC will prove.</h2>
+    </div>
+    <div class="pilot-grid">
+      <div class="scopelist">
+        <div class="scopeitem"><span class="m">S1</span><span>Forecast tire remaining useful life.</span><span class="maps">UC4</span></div>
+        <div class="scopeitem"><span class="m">S2</span><span>Predict wear-to-limit dates.</span><span class="maps">UC3 · UC4</span></div>
+        <div class="scopeitem"><span class="m">S3</span><span>Prioritize wheels requiring maintenance attention.</span><span class="maps">UC1</span></div>
+        <div class="scopeitem"><span class="m">S4</span><span>Support inventory and maintenance planning decisions.</span><span class="maps">UC1 · UC4</span></div>
+        <div class="scopeitem"><span class="m">S5</span><span>Generate risk alerts for operational disruptions.</span><span class="maps">UC1 · UC4</span></div>
+      </div>
+      <div class="sidepanel">
+        <h3>Deployment focus.</h3>
+        <p>The pilot targets selected aircraft fleets and wheel assemblies — a bounded scope
+        that still exercises every capability end to end.</p>
+        <div class="capchips">
+          <span class="capchip">Predictive maintenance</span>
+          <span class="capchip">Time-series forecasting</span>
+          <span class="capchip">Machine learning</span>
+          <span class="capchip">Computer-vision inspection</span>
+          <span class="capchip">Asset health analytics</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== BUILD DIRECTION ==================== -->
+<section class="band band-white reveal">
+  <div class="inner">
+    <span class="eyebrow" style="display:block;margin-bottom:26px;">Build direction</span>
+    <p class="build-statement">Forecast remaining life, predict wear-to-limit dates, prioritize wheels,
+    plan spare inventory, and raise disruption alerts — <em>delivered as one web app engineers
+    already want to open.</em></p>
+    <div class="buildchips">
+      <span class="chip">3D reconstruction</span>
+      <span class="chip">crack + groove-depth detection</span>
+      <span class="chip">VLM assessment</span>
+      <span class="chip">time-series RUL</span>
+      <span class="chip">next-flight simulation</span>
+      <span class="chip">agentic assistant</span>
+    </div>
+  </div>
+</section>
+
+<!-- ==================== FOOTER ==================== -->
+<footer class="footer">
+  <div class="inner">
+    <div class="footer-mark">Tire RUL<span class="reg">.</span></div>
+    <div class="footer-row">
+      <p class="note">Aircraft tire remaining-life prediction — proof of concept. Functional and
+      AWS deployment architecture. Predictive maintenance for aviation MRO.</p>
+      <span class="tag">POC Pitch · 2026</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      els.forEach(function (e) { e.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.08 });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+</script>

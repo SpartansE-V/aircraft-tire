@@ -16,6 +16,7 @@ from app.api.errors import install_error_handlers, internal_error_response
 from app.api.routes.crack_detector import router as crack_detector_router
 from app.api.routes.health import router as health_router
 from app.api.routes.tire_assessment import router as tire_assessment_router
+from app.api.routes.tire_image import router as tire_image_router
 from app.api.routes.tire_rul import router as tire_rul_router
 from app.api.routes.tread_depth import router as tread_depth_router
 from app.config import Settings, get_settings
@@ -134,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(crack_detector_router)
     application.include_router(tread_depth_router)
     application.include_router(tire_rul_router)
+    application.include_router(tire_image_router)
 
     @application.get(
         "/assets/mock-tyres/{asset_path:path}",
