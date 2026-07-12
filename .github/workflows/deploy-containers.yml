@@ -120,12 +120,10 @@ jobs:
       - name: Build and push image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           # Repo-root context so assets/mock-tyres/release is available at
           # /app/assets/... (REPO_ROOT for enrich-scans + /assets fallback).
-          docker build -f app/Dockerfile --build-arg OPENAI_API_KEY="$OPENAI_API_KEY" \
-            -t "$REGISTRY/aircraft-tire:${{ github.sha }}" .
+          docker build -f app/Dockerfile -t "$REGISTRY/aircraft-tire:${{ github.sha }}" .
           docker push "$REGISTRY/aircraft-tire:${{ github.sha }}"
 
       - uses: hashicorp/setup-terraform@v3
@@ -138,6 +136,8 @@ jobs:
 
       - name: Deploy app service
         working-directory: infra
+        env:
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
         run: |
           terraform apply -auto-approve \
             -target='module.ecs["app"]' \

@@ -78,6 +78,8 @@ jobs:
 
       - name: Terraform apply
         working-directory: infra
+        env:
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
         run: |
           terraform apply -auto-approve \
             -var="image_tag_app=${{ steps.current-tags.outputs.app_tag }}" \
