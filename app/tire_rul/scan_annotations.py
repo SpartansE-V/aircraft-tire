@@ -231,7 +231,7 @@ _DISPLAY_2D = {
 }
 
 
-def _ann_2d(ann: dict[str, Any]) -> dict[str, Any] | None:
+def _ann_2d(ann: dict[str, Any], *, source: str | None = None) -> dict[str, Any] | None:
     cat = ann.get("category", "")
     if cat not in _DISPLAY_2D:
         return None
@@ -240,22 +240,35 @@ def _ann_2d(ann: dict[str, Any]) -> dict[str, Any] | None:
     seg = ann.get("segmentation") or []
     # Keep only polygon rings (list of flat [x,y,...] coords).
     polygons = [ring for ring in seg if isinstance(ring, list) and len(ring) >= 6]
+    # Same key as extract_cracks() labels so 2D ↔ 3D selection can sync.
+    defect_label = (
+        f"crack-{source}-{ann.get('id', 0)}" if cat == "crack" and source else None
+    )
     return {
         "category": cat,
         "label": _DISPLAY_2D[cat],
+        "defect_label": defect_label,
         "bbox": [float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3])],
         "center": {"x": cx, "y": cy},
         "segmentation": polygons,
     }
 
 
-def annotations_2d_for_image(image_meta: dict[str, Any] | None) -> dict[str, Any]:
-    """Filter metadata annotations for UI overlay (crack / shallow only)."""
+def annotations_2d_for_image(
+    image_meta: dict[str, Any] | None,
+    *,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Filter metadata annotations for UI overlay (crack / shallow only).
+
+    ``source`` is the scan image stem (``circle``, ``flatten-left``, …) used to
+    build ``defect_label`` matching the 3D crack overlay labels.
+    """
     if not image_meta:
         return {"width": 0, "height": 0, "annotations": []}
     anns = []
     for ann in image_meta.get("annotations", []):
-        item = _ann_2d(ann)
+        item = _ann_2d(ann, source=source)
         if item:
             anns.append(item)
     return {
@@ -305,9 +318,11 @@ def images_for(
     circle_raw = (
         {"width": 0, "height": 0, "annotations": []}
         if use_healthy_circle
-        else annotations_2d_for_image(images_meta.get("circle.png"))
+        else annotations_2d_for_image(images_meta.get("circle.png"), source="circle")
     )
-    flatten_raw = annotations_2d_for_image(images_meta.get(flatten_key))
+    flatten_raw = annotations_2d_for_image(
+        images_meta.get(flatten_key), source=f"flatten-{flatten_side}"
+    )
 
     # Only error tires get 2D overlays; healthy/warning stay clean.
     if scan_status == "error":

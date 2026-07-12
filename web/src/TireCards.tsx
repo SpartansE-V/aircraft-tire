@@ -196,26 +196,51 @@ export function TreadCard({ tire }: { tire: Tire }) {
   )
 }
 
-export function DefectsCard({ tire }: { tire: Tire }) {
+export function DefectsCard({
+  tire,
+  selectedLabel = null,
+  onSelect,
+}: {
+  tire: Tire
+  selectedLabel?: string | null
+  onSelect?: (label: string | null) => void
+}) {
   return (
     <Card title="Defects" mock tag="Vision model">
       {tire.defects.length === 0 ? (
         <p className="py-6 text-center text-xs text-[var(--ink-4)]">Clean — no wear or damage flags</p>
       ) : (
         <ul className="space-y-2">
-          {tire.defects.map((d) => (
-            <li key={d.label} className="flex items-start gap-2 border border-[var(--line)] bg-[var(--panel)] p-2">
-              <span className="mt-0.5 text-xs" style={{ color: d.kind === 'damage' ? 'var(--crit)' : 'var(--warn)' }}>
-                {d.kind === 'damage' ? '⚠' : '≈'}
-              </span>
-              <div className="min-w-0">
-                <div className="text-xs text-[var(--ink)]">{d.label}</div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
-                  {d.zone} · {d.kind === 'damage' ? 'REMOVE — AOG kit' : 'MONITOR — next check'}
+          {tire.defects.map((d) => {
+            const on = selectedLabel === d.label
+            const dim = selectedLabel != null && !on
+            return (
+              <li
+                key={d.label}
+                className={`flex items-start gap-2 border p-2 transition-colors ${
+                  onSelect ? 'cursor-pointer' : ''
+                } ${on ? 'border-[#22d3ee] bg-[#22d3ee22]' : 'border-[var(--line)] bg-[var(--panel)]'} ${
+                  dim ? 'opacity-40' : ''
+                }`}
+                onClick={() => onSelect?.(on ? null : d.label)}
+              >
+                <span
+                  className="mt-0.5 text-xs"
+                  style={{ color: on ? '#22d3ee' : d.kind === 'damage' ? 'var(--crit)' : 'var(--warn)' }}
+                >
+                  {d.kind === 'damage' ? '⚠' : '≈'}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs text-[var(--ink)]">{d.label}</div>
+                  <div className="mt-0.5 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
+                    {d.zone}
+                    {d.source ? ` · ${d.source}` : ''} ·{' '}
+                    {d.kind === 'damage' ? 'REMOVE — AOG kit' : 'MONITOR — next check'}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
       <Open>Wear and acute damage take different logistics paths — one schedules a swap, the other grounds the aircraft</Open>

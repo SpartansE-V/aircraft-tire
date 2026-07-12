@@ -640,6 +640,10 @@ class TireScanAnnotation2D(StrictSchema):
         default=None,
         description="Display label; null for cracks, 'shallow' for tread-shallow.",
     )
+    defect_label: str | None = Field(
+        default=None,
+        description="Matches TireDefect3D.label (e.g. crack-circle-26) for 2D↔3D selection sync.",
+    )
     bbox: list[float] = Field(min_length=4, max_length=4, description="COCO [x, y, w, h].")
     center: dict[str, float] = Field(description="Annotation centre {x, y}.")
     segmentation: list[list[float]] = Field(
@@ -707,6 +711,80 @@ class FleetTiresResponse(StrictSchema):
     aircraft_type: str
     home_station: str
     tires: list[FleetTireItem]
+
+
+CircleAnalysisBackendValue = Literal["auto", "openai", "mock"]
+CircleConditionValue = Literal["SERVICEABLE", "MONITOR", "UNSERVICEABLE"]
+
+
+class CircleAnalysisRequest(StrictSchema):
+    """Circle scan + 2D crack overlays for a focused VLM condition report."""
+
+    model_config = ConfigDict(
+        strict=True,
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "image_url": "/assets/mock-tyres/release/1h233b/circle.png",
+                    "annotations": [
+                        {
+                            "category": "crack",
+                            "label": None,
+                            "defect_label": "crack-circle-26",
+                            "bbox": [120.0, 80.0, 40.0, 30.0],
+                            "center": {"x": 140.0, "y": 95.0},
+                            "segmentation": [
+                                [120.0, 80.0, 160.0, 80.0, 160.0, 110.0, 120.0, 110.0]
+                            ],
+                        }
+                    ],
+                    "serial": "MICHELIN-ABC123",
+                    "model_type": "radial",
+                    "scan_status": "error",
+                    "tread_depths": ["4-5mm", "4-5mm", "3-4mm", "4-5mm", "5-6mm", "4-5mm"],
+                    "defect_label": "crack-circle-26",
+                    "backend": "auto",
+                }
+            ]
+        },
+    )
+
+    image_url: str = Field(
+        min_length=1,
+        max_length=512,
+        description="Circle scan URL under /assets/mock-tyres/.",
+    )
+    annotations: list[TireScanAnnotation2D] = Field(
+        default_factory=list,
+        description="2D crack/tread overlays currently drawn on the circle image.",
+    )
+    serial: str | None = Field(default=None, max_length=64)
+    model_type: TireModelTypeValue | None = None
+    scan_status: TireScanStatusValue | None = None
+    tread_depths: list[TreadDepthBandValue] = Field(default_factory=list)
+    defect_label: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Optional focused crack id when the engineer clicked a specific overlay.",
+    )
+    backend: CircleAnalysisBackendValue = Field(
+        default="auto",
+        description="'auto' uses OpenAI when OPENAI_API_KEY is set, otherwise mock.",
+    )
+
+
+class CircleAnalysisResponse(StrictSchema):
+    """Short technical VLM report for a circle scan with crack overlays."""
+
+    condition: CircleConditionValue
+    summary: str = Field(description="2–3 short technical sentences on tire condition.")
+    crack_findings: list[str] = Field(description="One short finding per detected crack.")
+    action: str = Field(description="One short recommended maintenance action.")
+    crack_count: int = Field(ge=0)
+    backend: str = Field(description="Backend that produced the report, e.g. openai:gpt-4o-mini.")
+    serial: str | None = None
+    defect_label: str | None = None
 
 
 class ModelPrediction(StrictSchema):

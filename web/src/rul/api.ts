@@ -254,6 +254,8 @@ export type TireDefect3D = {
 export type ScanAnnotation2D = {
   category: 'crack' | 'tread-shallow'
   label: string | null
+  /** Matches TireDefect3D.label for 2D↔3D selection sync. */
+  defect_label?: string | null
   bbox: number[]
   center: { x: number; y: number }
   segmentation: number[][]
@@ -319,6 +321,39 @@ export function fetchFleetAircraft(): Promise<FleetAircraftListResponse> {
 export function fetchFleetTires(tail: string): Promise<FleetTiresResponse> {
   const q = new URLSearchParams({ tail })
   return request<FleetTiresResponse>(`/api/v1/tire_rul/fleet/tires?${q}`)
+}
+
+export type CircleAnalysisCondition = 'SERVICEABLE' | 'MONITOR' | 'UNSERVICEABLE'
+
+export type CircleAnalysisRequest = {
+  image_url: string
+  annotations: ScanAnnotation2D[]
+  serial?: string | null
+  model_type?: TireModelType | null
+  scan_status?: ScanStatus | null
+  tread_depths?: FleetTireItem['tread_depths']
+  /** Focused crack when the engineer clicked a specific overlay. */
+  defect_label?: string | null
+  backend?: 'auto' | 'openai' | 'mock'
+}
+
+export type CircleAnalysisResponse = {
+  condition: CircleAnalysisCondition
+  summary: string
+  crack_findings: string[]
+  action: string
+  crack_count: number
+  backend: string
+  serial: string | null
+  defect_label: string | null
+}
+
+/** Composite circle image + crack overlays → short technical VLM report. */
+export function analyzeCircle(req: CircleAnalysisRequest): Promise<CircleAnalysisResponse> {
+  return request<CircleAnalysisResponse>('/api/v1/tire_rul/analyze-circle', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
 }
 
 export function useFleetAircraft(): UseQueryResult<FleetAircraftListResponse, ApiError> {
