@@ -18,4 +18,6 @@ def test_manifest_maps_release_paths_to_upload_keys():
     assert s3_key_for("circle.png").startswith("uploads/")
     assert s3_key_for("1h233b/flatten-left.png").endswith("flatten-left.png")
     assert upload_bucket() == manifest["bucket"]
-    assert local_file("circle.png") is not None
+    # Release PNGs are optional locally; CI serves them from S3 via the manifest.
+    local = local_file("circle.png")
+    assert local is None or local.is_file()

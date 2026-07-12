@@ -11,6 +11,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
 ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+LOCAL_CORS_ORIGINS = ",".join(
+    (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    )
+)
 
 # The AI backends use their SDKs' standard environment-variable configuration. Load the
 # application development file before the application imports those backends; existing
@@ -75,8 +87,12 @@ class Settings(BaseSettings):
         env_nested_delimiter="__",
     )
 
-    cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
+    cors_origins: str = Field(default=LOCAL_CORS_ORIGINS, alias="CORS_ORIGINS")
     port: int = Field(default=8000, ge=1, le=65535, alias="PORT")
+    # Bake mock-tyre scan packs into tires.parquet when the API process starts
+    # (same job as `python -m app.tire_rul.enrich_tire_assets`). Disable in tests.
+    enrich_on_startup: bool = Field(default=True, alias="ENRICH_ON_STARTUP")
+    enrich_seed: int = Field(default=20260712, ge=0, alias="ENRICH_SEED")
     roboflow: RoboflowSettings = Field(default_factory=RoboflowSettings)
     uploads: UploadsSettings = Field(default_factory=UploadsSettings)
 

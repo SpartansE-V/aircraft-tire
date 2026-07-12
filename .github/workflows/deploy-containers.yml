@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "app/**"
+      - "assets/mock-tyres/**"
       - "3d-reconstructor/**"
       - "web/**"
       - ".github/workflows/**"
@@ -65,6 +66,7 @@ jobs:
           filters: |
             app:
               - 'app/**'
+              - 'assets/mock-tyres/**'
             reconstructor:
               - '3d-reconstructor/**'
             web:
@@ -103,12 +105,27 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
+      - uses: astral-sh/setup-uv@v3
+        with:
+          working-directory: app
+
+      # Deterministic (fixed seed). Rewrites tires.parquet scan columns so the
+      # image always ships fleet /tyres data — needs assets/mock-tyres/*/metadata.json.
+      - name: Enrich tire scan packs
+        working-directory: app
+        run: |
+          uv sync --frozen --extra ai
+          PYTHONPATH=.. uv run python -m app.tire_rul.enrich_tire_assets
+
       - name: Build and push image
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          docker build --build-arg OPENAI_API_KEY="$OPENAI_API_KEY" -t "$REGISTRY/aircraft-tire:${{ github.sha }}" app
+          # Repo-root context so assets/mock-tyres/release is available at
+          # /app/assets/... (REPO_ROOT for enrich-scans + /assets fallback).
+          docker build -f app/Dockerfile --build-arg OPENAI_API_KEY="$OPENAI_API_KEY" \
+            -t "$REGISTRY/aircraft-tire:${{ github.sha }}" .
           docker push "$REGISTRY/aircraft-tire:${{ github.sha }}"
 
       - uses: hashicorp/setup-terraform@v3

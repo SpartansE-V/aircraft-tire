@@ -1,0 +1,199 @@
+{
+  "left": {
+    "side": "left",
+    "defects": [
+      {
+        "kind": "damage",
+        "label": "crack-circle-26",
+        "severity": "high",
+        "zone": "Sidewall \u00b7 crack",
+        "category": "crack",
+        "source": "circle",
+        "angle_rad": -0.711354,
+        "lateral_pct": -55.19,
+        "at": [
+          -0.5246,
+          -0.0734,
+          0.6087
+        ],
+        "r": 0.08,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-circle-27",
+        "severity": "high",
+        "zone": "Sidewall \u00b7 crack",
+        "category": "crack",
+        "source": "circle",
+        "angle_rad": -1.931287,
+        "lateral_pct": -81.21,
+        "at": [
+          -0.7583,
+          -0.108,
+          -0.2858
+        ],
+        "r": 0.08,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-circle-28",
+        "severity": "high",
+        "zone": "Sidewall \u00b7 crack",
+        "category": "crack",
+        "source": "circle",
+        "angle_rad": 1.647403,
+        "lateral_pct": 78.66,
+        "at": [
+          0.7844,
+          0.1046,
+          -0.0602
+        ],
+        "r": 0.08,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-flatten-left-10",
+        "severity": "high",
+        "zone": "Tread \u00b7 left \u00b7 crack",
+        "category": "crack",
+        "source": "flatten-left",
+        "angle_rad": 0.579933,
+        "lateral_pct": -0.42,
+        "at": [
+          0.4658,
+          0.0009,
+          0.711
+        ],
+        "r": 0.209,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-flatten-left-11",
+        "severity": "high",
+        "zone": "Tread \u00b7 left \u00b7 crack",
+        "category": "crack",
+        "source": "flatten-left",
+        "angle_rad": 4.230067,
+        "lateral_pct": 19.17,
+        "at": [
+          -0.753,
+          -0.0401,
+          -0.3943
+        ],
+        "r": 0.1909,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-flatten-left-12",
+        "severity": "high",
+        "zone": "Tread \u00b7 left \u00b7 crack",
+        "category": "crack",
+        "source": "flatten-left",
+        "angle_rad": 4.020627,
+        "lateral_pct": -27.5,
+        "at": [
+          -0.6546,
+          0.0575,
+          -0.5422
+        ],
+        "r": 0.1915,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-flatten-left-13",
+        "severity": "high",
+        "zone": "Tread \u00b7 left \u00b7 crack",
+        "category": "crack",
+        "source": "flatten-left",
+        "angle_rad": 4.58168,
+        "lateral_pct": -12.5,
+        "at": [
+          -0.8427,
+          0.0261,
+          -0.1108
+        ],
+        "r": 0.08,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-flatten-left-14",
+        "severity": "high",
+        "zone": "Tread \u00b7 left \u00b7 crack",
+        "category": "crack",
+        "source": "flatten-left",
+        "angle_rad": 4.583209,
+        "lateral_pct": 20.83,
+        "at": [
+          -0.8429,
+          -0.0435,
+          -0.1095
+        ],
+        "r": 0.0924,
+        "wave": true
+      }
+    ]
+  },
+  "right": {
+    "side": "right",
+    "defects": [
+      {
+        "kind": "damage",
+        "label": "crack-circle-26",
+        "severity": "high",
+        "zone": "Sidewall \u00b7 crack",
+        "category": "crack",
+        "source": "circle",
+        "angle_rad": -0.711354,
+        "lateral_pct": -55.19,
+        "at": [
+          -0.5246,
+          -0.0734,
+          0.6087
+        ],
+        "r": 0.08,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-circle-27",
+        "severity": "high",
+        "zone": "Sidewall \u00b7 crack",
+        "category": "crack",
+        "source": "circle",
+        "angle_rad": -1.931287,
+        "lateral_pct": -81.21,
+        "at": [
+          -0.7583,
+          -0.108,
+          -0.2858
+        ],
+        "r": 0.08,
+        "wave": true
+      },
+      {
+        "kind": "damage",
+        "label": "crack-circle-28",
+        "severity": "high",
+        "zone": "Sidewall \u00b7 crack",
+        "category": "crack",
+        "source": "circle",
+        "angle_rad": 1.647403,
+        "lateral_pct": 78.66,
+        "at": [
+          0.7844,
+          0.1046,
+          -0.0602
+        ],
+        "r": 0.08,
+        "wave": true
+      }
+    ]
+  }
+}
