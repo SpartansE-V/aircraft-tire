@@ -15,6 +15,7 @@ dependencies = [
     "uvicorn[standard]>=0.34.0,<1.0.0",
     # Runtime for the RUL AI endpoint (app.tire_rul.scoring is pure-numpy; config loads YAML).
     "numpy>=1.26,<2.1",
+    "pandas>=2.2.3",
 ]
 
 [project.optional-dependencies]

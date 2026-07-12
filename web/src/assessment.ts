@@ -1,16 +1,19 @@
 // The tire-assessment API: its contract, the mapper from this app's state into it, and the one fetch.
 // Design notes and the reasoning behind the clamping live in ../API_INTEGRATION.md.
 //
-// ponytail: one endpoint, one file. No client class, no codegen — vite proxies /api, so the path is
-// relative and there is no base URL to configure.
+// ponytail: one endpoint, one file. No client class or codegen. Development uses Vite's /api proxy;
+// deployments that do not provide a same-origin reverse proxy can set VITE_API_BASE.
 import { useMutation } from '@tanstack/react-query'
 import { knownDefects, type DefectCode, type Tire } from './data.ts'
-import { crosswindKt, type Landing } from './sim.ts'
+import { crosswindKt, trueGroundSpeedMps, type Landing } from './sim.ts'
 import type { Attitude } from './landingEngine.ts'
 
 export type Range = { minimum: number; most_likely: number; maximum: number }
 export type RunwayCondition = 'DRY' | 'WET' | 'CONTAMINATED' | 'ROUGH'
 export type ProfileId = 'pilot-main-v1' | 'pilot-nose-v1'
+
+const ENV = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {}
+const API_BASE = (ENV.VITE_API_BASE ?? '').replace(/\/$/, '')
 
 export type AssessmentRequest = {
   intended_use: 'SCENARIO_PLANNING'
@@ -103,7 +106,6 @@ export type EnvelopeKey = keyof typeof ENVELOPE
 /** One future input after clamping: what you asked for, what the model was actually given. */
 export type Clamp = { key: EnvelopeKey; label: string; asked: number; sent: number; unit: string }
 
-const KT_TO_MS = 0.514444
 const FPM_TO_MS = 1 / 196.85
 
 const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.min(hi, Math.max(lo, v))
@@ -147,7 +149,9 @@ export function toAssessmentRequest(
 ): { request: AssessmentRequest; clamps: Clamp[] } {
   const asked = {
     landing_weight_kg: l.weightT * 1000,
-    touchdown_ground_speed_ms: l.gsKt * KT_TO_MS,
+    // `gsKt` is indicated approach speed. The assessment contract asks for speed over the runway,
+    // which also includes field-elevation and head/tailwind effects already modeled by the simulator.
+    touchdown_ground_speed_ms: trueGroundSpeedMps(l),
     // The app's crosswind is signed (from the left / from the right). The model wants a magnitude.
     crosswind_kt: Math.abs(crosswindKt(l)),
     touchdown_sink_rate_ms: l.sinkFpm * FPM_TO_MS,
@@ -203,8 +207,9 @@ export function toAssessmentRequest(
     .map((key) => ({ key, label: LABELS[key], asked: asked[key], sent: future[key].most_likely, unit: UNITS[key] }))
     .filter((c) => Math.abs(c.asked - c.sent) > 1e-6)
 
-  // Tread depth: the shallowest groove governs, and the model will not accept more than the profile's
-  // 10.9 mm initial depth. A defect-free tyre reports no defects — see knownDefects().
+  // Tread depth: the shallowest groove governs. A defect-free tyre reports no defects — see
+  // knownDefects(). Do not coerce current measurements into the release domain here: the backend's
+  // fail-closed gate must withhold unsupported condition data rather than receive altered telemetry.
   const treadMm = Math.min(...tire.grooves)
 
   return {
@@ -214,12 +219,10 @@ export function toAssessmentRequest(
       profile_id: tire.gear === 'nose' ? 'pilot-nose-v1' : 'pilot-main-v1',
       current_condition: {
         cycles_since_install: tire.cycles,
-        current_tread_depth_mm: Math.min(treadMm, 10.9),
-        // Pressure must sit at or below the reference, and within 10% of it, or the model refuses the
-        // request. An over-inflated tyre is reported *at* reference rather than 422'd on the user.
-        measured_cold_pressure_psi: Math.min(tire.psi, tire.psiTarget),
+        current_tread_depth_mm: treadMm,
+        measured_cold_pressure_psi: tire.psi,
         reference_cold_pressure_psi: tire.psiTarget,
-        tire_temperature_c: clamp(tire.oatC, [-60, 150]),
+        tire_temperature_c: tire.oatC,
         retread_count: tire.retreads,
         known_defects: knownDefects(tire),
       },
@@ -247,15 +250,22 @@ export class AssessmentError extends Error {
   }
 }
 
-/** True when the model declined to answer — a designed outcome, not a fault. 5xx is a fault. */
-export const isWithheld = (e: unknown): e is AssessmentError => e instanceof AssessmentError && e.status < 500
+/** True when the model declined to answer — a designed outcome, not a transport or routing fault. */
+export const isWithheld = (e: unknown): e is AssessmentError =>
+  e instanceof AssessmentError &&
+  (e.status === 409 || (e.status === 422 && e.code === 'MODEL_INPUT_OUTSIDE_RELEASE_DOMAIN'))
 
 export async function assessTire(request: AssessmentRequest): Promise<AssessmentResponse> {
-  const res = await fetch('/api/v1/tire-assessments', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(request),
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE}/api/v1/tire-assessments`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(request),
+    })
+  } catch {
+    throw new AssessmentError('NETWORK', 'Cannot reach the tire-assessment service.', 0)
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => null)
     throw new AssessmentError(
