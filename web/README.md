@@ -1,5 +1,29 @@
 # Tire Ops — Web
 
+<div align="center">
+
+![Aviation Track Winner](https://img.shields.io/badge/🏆_Aviation_Track_Winner-C9A227?style=for-the-badge)
+[![YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=dySqvJZkLSc)
+
+<br />
+
+![Tire inspection](../assets/tire.gif)
+
+</div>
+
+---
+
+<div align="center">
+
+
+**Team: SpartansE-V**
+
+Bạch Doãn Vương · Tú Nguyễn (Thompson)· Trí Đoàn (TeeA)· Trọng Trần (Alex) · Thu Hoài (Yinn) · Nhân Nguyễn 
+
+![SpartansE-V — Aviation Track Winner, Agentic AI Build Week](../assets/team.jpg)
+
+</div>
+
 React + Vite dashboard for the aircraft-tire POC. Three routes (`src/App.tsx`):
 
 | Route | What |
@@ -88,3 +112,7 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## Agentic AI
+
+![Aerotrace Tire Intelligence](../assets/landing.png)
