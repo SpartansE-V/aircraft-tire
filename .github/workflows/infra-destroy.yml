@@ -1,0 +1,59 @@
+name: Destroy Infra
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "destroy" to confirm tearing down all infra'
+        required: true
+
+# Shares the same lock group as infra.yml/deploy-containers.yml so a destroy
+# can't race an in-flight apply against the same state.
+concurrency:
+  group: terraform-aircraft-tire
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+  terraform-destroy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "destroy" ]; then
+            echo "Confirmation input must be exactly 'destroy'. Aborting." >&2
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: Terraform init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform destroy
+        working-directory: infra
+        env:
+          TF_VAR_openai_api_key: ${{ secrets.OPENAI_API_KEY }}
+        run: terraform destroy -auto-approve
+
+      - name: Publish summary
+        if: always()
+        run: |
+          echo "### Infra destroy run complete :boom:" >> "$GITHUB_STEP_SUMMARY"
