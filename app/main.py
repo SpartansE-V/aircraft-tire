@@ -2,14 +2,15 @@
 
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import Response
+from fastapi.responses import FileResponse, Response
 
 from app.api.errors import install_error_handlers, internal_error_response
 from app.api.routes.crack_detector import router as crack_detector_router
@@ -19,6 +20,11 @@ from app.api.routes.tire_rul import router as tire_rul_router
 from app.api.routes.tread_depth import router as tread_depth_router
 from app.config import Settings, get_settings
 from app.domain.schemas import RootResponse
+from app.tire_rul.mock_tyres_assets import (
+    fetch_s3_object,
+    local_file,
+    s3_key_for,
+)
 
 SERVICE_NAME = "Aircraft Tire Assessment API"
 SERVICE_VERSION = "1.0.0"
@@ -29,10 +35,35 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 RequestHandler = Callable[[Request], Awaitable[Response]]
 
 
+def enrich_tires_on_startup(*, seed: int) -> None:
+    """Run ``enrich_tire_assets`` so fleet /tyres endpoints have scan columns."""
+    from app.tire_rul.enrich_tire_assets import enrich_tires
+
+    enrich_tires(seed=seed)
+    logger.info("Enriched tires.parquet scan packs on startup (seed=%s)", seed)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build and configure the FastAPI application."""
 
     runtime_settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(_application: FastAPI) -> AsyncIterator[None]:
+        if runtime_settings.enrich_on_startup:
+            try:
+                enrich_tires_on_startup(seed=runtime_settings.enrich_seed)
+            except ImportError:
+                logger.warning(
+                    "Skipping tire enrich on startup: AI stack not installed "
+                    "(`uv sync --extra ai`)."
+                )
+            except FileNotFoundError as exc:
+                logger.warning("Skipping tire enrich on startup: %s", exc)
+            except Exception:
+                logger.exception("Tire enrich on startup failed")
+        yield
+
     application = FastAPI(
         title=SERVICE_NAME,
         version=SERVICE_VERSION,
@@ -44,6 +75,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         docs_url="/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
 
     install_error_handlers(application)
@@ -102,6 +134,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(crack_detector_router)
     application.include_router(tread_depth_router)
     application.include_router(tire_rul_router)
+
+    @application.get(
+        "/assets/mock-tyres/{asset_path:path}",
+        include_in_schema=False,
+        name="mock-tyres",
+    )
+    async def mock_tyres_asset(asset_path: str) -> Response:
+        """Serve scan images from disk when present, otherwise from the uploads bucket."""
+        # Mounted URLs look like /assets/mock-tyres/release/1h233b/circle.png
+        rel = (
+            asset_path[len("release/") :]
+            if asset_path.startswith("release/")
+            else asset_path
+        )
+
+        disk = local_file(rel)
+        if disk is not None:
+            return FileResponse(disk)
+
+        key = s3_key_for(rel)
+        if key:
+            fetched = fetch_s3_object(key)
+            if fetched is not None:
+                body, content_type = fetched
+                return Response(content=body, media_type=content_type)
+
+        raise HTTPException(status_code=404, detail="Mock tyre asset not found.")
+
     return application
 
 

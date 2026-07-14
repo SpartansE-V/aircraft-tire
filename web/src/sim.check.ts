@@ -4,8 +4,10 @@ import { CAL, G, OLEO, oleoResponse, rolloutDecelMps2, simulate, trueGroundSpeed
 
 const TIRE = { grooves: [6.2, 6.0, 5.8, 6.1], grooveLimit: 2.4, psi: 200, psiTarget: 200 }
 // Sea level, long dry runway — KLAX, roughly. The benign case everything else is measured against.
+// Runway 25L points 250°; the wind is off the nose and to one side, so it is part head, part cross.
 const NOMINAL: Landing = {
-  weightT: 200, sinkFpm: 240, gsKt: 138, brakeShare: 0.55, oatC: 24, crosswindKt: 12,
+  weightT: 200, sinkFpm: 240, gsKt: 138, brakeShare: 0.55, oatC: 24,
+  windKt: 14, windDirDeg: 290, runwayHeadingDeg: 250, antiskid: true,
   surface: 'dry', elevFt: 126, runwayM: 3685,
 }
 
@@ -106,13 +108,86 @@ assert.ok(reboundTo < maxStroke * 0.75, `the gas spring must push the stroke bac
 // aircraft bounces is lift against sink rate, not the recoil orifice. Asserting otherwise would be
 // asserting a story rather than the model, so the assertion that used to live here has been deleted.
 
+// --- ANTI-SKID AND FLAT-SPOTTING. Flat-spotting is a top-3 reason tyres come off aircraft and the
+// model could not produce one. The mechanism is a wheel that stops turning: every metre the aeroplane
+// then slides is ground off the SAME arc of tread.
+//
+// With anti-skid, the wheel never locks, however hard the pedal is pushed.
+for (const share of [0.2, 0.55, 1]) {
+  for (const surface of ['dry', 'wet', 'contaminated'] as const) {
+    const r = simulate({ ...NOMINAL, brakeShare: share, surface, antiskid: true }, TIRE)
+    assert.equal(r.locked, false, `anti-skid must not let the wheel lock: ${surface} at ${share * 100} % brake`)
+    assert.equal(r.flatSpotMm, 0, 'and so there can be no flat spot')
+  }
+}
+
+// Without it, whether the wheel locks is a straight contest between what the brakes ask for and what
+// the runway can supply. Half pedal is fine on dry tarmac and locks the wheels on a wet one.
+assert.equal(simulate({ ...NOMINAL, brakeShare: 0.55, surface: 'dry', antiskid: false }, TIRE).locked, false, 'half pedal on dry tarmac does not lock')
+assert.equal(simulate({ ...NOMINAL, brakeShare: 0.55, surface: 'wet', antiskid: false }, TIRE).locked, true, 'the same pedal on a wet runway does')
+assert.equal(simulate({ ...NOMINAL, brakeShare: 1, surface: 'dry', antiskid: false }, TIRE).locked, true, 'and stamping on it locks even a dry one')
+
+// A locked wheel stops you WORSE. This is the counter-intuitive half, and it is the reason anti-skid
+// exists: sliding friction is below peak friction, so locking up costs runway *and* costs the tyre.
+const skid = simulate({ ...NOMINAL, brakeShare: 1, surface: 'wet', antiskid: false }, TIRE)
+const held = simulate({ ...NOMINAL, brakeShare: 1, surface: 'wet', antiskid: true }, TIRE)
+assert.ok(skid.stopDistM > held.stopDistM, `locking the wheels must lengthen the stop, not shorten it: ${skid.stopDistM.toFixed(0)} m vs ${held.stopDistM.toFixed(0)} m`)
+
+// And it grinds a flat. A full-rollout slide does not make a tidy flat spot at all — it goes straight
+// through the tread and into the carcass, and the tyre lets go. The depth is capped at the rubber the
+// tyre actually has, because "18 mm of flat" on a tyre with 6 mm of tread is not an answer.
+assert.ok(skid.slideDistM > 200, `it slides most of the rollout: ${skid.slideDistM.toFixed(0)} m`)
+assert.equal(skid.burst, true, 'a full-rollout locked slide bursts the tyre')
+assert.ok(skid.flatSpotMm <= Math.min(...TIRE.grooves) + CAL.carcassMarginMm + 1e-9, `the flat cannot be deeper than the rubber there is: ${skid.flatSpotMm.toFixed(1)} mm`)
+assert.ok(skid.burstAtM > 0 && skid.burstAtM < skid.slideDistM, `it reaches the carcass partway through the slide: ${skid.burstAtM.toFixed(0)} m of ${skid.slideDistM.toFixed(0)} m`)
+assert.equal(skid.status, 'action', 'a locked wheel is actionable')
+assert.ok(skid.flags.some((f) => /anti-skid/i.test(f)), 'and it must name the cause')
+assert.ok(skid.flags.some((f) => /burst/i.test(f)), 'and the damage')
+
+// On a runway with grip, there is no such thing as a survivable locked-wheel rollout: the slide is
+// hundreds of metres, and hundreds of metres of grinding goes through the tread of *any* tyre. Lock
+// the wheels on tarmac and the tyre is gone. That is why anti-skid is a no-dispatch item.
+for (const gs of [100, 138, 175]) {
+  const r = simulate({ ...NOMINAL, brakeShare: 1, surface: 'wet', antiskid: false, gsKt: gs, runwayM: 5000 }, TIRE)
+  assert.equal(r.locked, true, `a wet runway at ${gs} kt with no anti-skid must lock`)
+  assert.equal(r.burst, true, `and no rollout is slow enough to survive it: ${gs} kt left ${r.flatSpotMm.toFixed(1)} mm`)
+}
+
+// Standing water is the opposite failure, and it is worth being precise about why. A locked wheel on a
+// flooded runway barely grinds at all — there is almost no friction to grind *with*, which is the same
+// µ = 0.05 that is failing to stop the aeroplane. The tyre survives with a shallow flat. The aircraft
+// does not stop. Two completely different ways to lose, and the model has to be able to tell them apart.
+const onWater = simulate({ ...NOMINAL, brakeShare: 1, surface: 'contaminated', antiskid: false, gsKt: 100, runwayM: 5000 }, TIRE)
+assert.equal(onWater.locked, true, 'it still locks')
+assert.equal(onWater.burst, false, 'but there is no grip to grind it away with, so the tyre survives')
+assert.ok(onWater.flatSpotMm > 0.2 && onWater.flatSpotMm < Math.min(...TIRE.grooves) + CAL.carcassMarginMm, `a flat, not a burst: ${onWater.flatSpotMm.toFixed(1)} mm`)
+assert.ok(onWater.stopDistM > simulate({ ...NOMINAL, brakeShare: 1, surface: 'wet', antiskid: false, gsKt: 100, runwayM: 5000 }, TIRE).stopDistM, 'what kills you on water is the stop, not the tyre')
+
+// The abrasion goes with distance slid, so a faster stop slides further and grinds more...
+const fast = simulate({ ...NOMINAL, brakeShare: 1, surface: 'wet', antiskid: false, gsKt: 175, runwayM: 5000 }, TIRE)
+const slow = simulate({ ...NOMINAL, brakeShare: 1, surface: 'wet', antiskid: false, gsKt: 100, runwayM: 5000 }, TIRE)
+assert.ok(fast.slideDistM > slow.slideDistM, 'a faster stop slides further')
+// ...but the distance it takes to grind *through* does NOT depend on how fast you were going. It is
+// set by the load pressing the tyre down and the µ doing the cutting, and both are the same either
+// way. Same rubber, same grinder: the tyre reaches its carcass after the same slide, and the only
+// thing speed changes is how much further it goes on sliding afterwards. Worth pinning, because it is
+// the sort of quantity one instinctively expects to scale with speed, and it does not.
+assert.ok(Math.abs(fast.burstAtM - slow.burstAtM) < 1, `distance-to-carcass must not depend on speed: ${fast.burstAtM.toFixed(0)} m vs ${slow.burstAtM.toFixed(0)} m`)
+assert.ok(fast.burstAtM > 100 && fast.burstAtM < 500, `and the tyre does not last long: through the rubber in ${fast.burstAtM.toFixed(0)} m`)
+// Grippier runway, faster grinder. A locked wheel destroys a tyre soonest on the surface that stops
+// you best — which is the whole grim joke of it.
+const onTarmac = simulate({ ...NOMINAL, brakeShare: 1, surface: 'dry', antiskid: false, runwayM: 5000 }, TIRE)
+assert.ok(onTarmac.burstAtM < fast.burstAtM, `dry tarmac grinds through soonest: ${onTarmac.burstAtM.toFixed(0)} m vs wet ${fast.burstAtM.toFixed(0)} m`)
+
 // Monotonic in the things that should drive it.
 assert.ok(simulate({ ...NOMINAL, sinkFpm: 640 }, TIRE).peakG > base.peakG, 'harder sink → higher g')
 assert.ok(simulate({ ...NOMINAL, gsKt: 165 }, TIRE).scrubMm > base.scrubMm, 'faster touchdown → more scrub')
 assert.ok(simulate({ ...NOMINAL, weightT: 240 }, TIRE).brakeEnergyMJ > base.brakeEnergyMJ, 'heavier → more brake energy')
 assert.ok(simulate({ ...NOMINAL, surface: 'contaminated' }, TIRE).stopDistM > base.stopDistM, 'lower µ → longer stop')
 assert.ok(simulate({ ...NOMINAL, brakeShare: 0.25 }, TIRE).stopDistM > base.stopDistM, 'less wheel braking → longer stop')
-assert.ok(simulate({ ...NOMINAL, crosswindKt: 35 }, TIRE).stopDistM > base.stopDistM, 'strong crosswind → less braking efficiency')
+// A pure crosswind (across the runway, no headwind component) costs directional-control margin.
+const pureCross = { ...NOMINAL, windKt: 35, windDirDeg: (NOMINAL.runwayHeadingDeg + 90) % 360 }
+assert.ok(simulate(pureCross, TIRE).stopDistM > simulate({ ...NOMINAL, windKt: 0 }, TIRE).stopDistM, 'strong crosswind → less braking efficiency')
 
 // A slammed-on hard landing has to trip the FOQA flag.
 assert.equal(simulate({ ...NOMINAL, sinkFpm: 700 }, TIRE).status, 'action', 'hard landing should be actionable')
@@ -124,7 +199,34 @@ assert.ok(simulate(NOMINAL, { ...TIRE, psi: 170 }).scrubMm > base.scrubMm, 'unde
 // has to be the thing that says so.
 assert.ok(base.stopMarginM > 0, 'a long dry runway should not be an overrun')
 // A 777 does not stop in 700 m. If the rollout delay ever goes missing, this is what catches it.
-assert.ok(base.stopDistM > 900 && base.stopDistM < 1600, `dry stop distance is implausible: ${base.stopDistM}`)
+// Measured in still air: `base` now carries a 10.7 kt headwind, and a headwind legitimately shortens
+// the stop. That it does is the point of the next block, not a fault in this one.
+const stillAir = simulate({ ...NOMINAL, windKt: 0 }, TIRE)
+assert.ok(stillAir.stopDistM > 900 && stillAir.stopDistM < 1600, `dry stop distance is implausible: ${stillAir.stopDistM}`)
+
+// --- WIND. It used to be a single `crosswindKt`, so the model had no headwind at all and the only
+// thing wind could ever do was make the stop *longer*. Both components now come off one vector against
+// the runway heading, so they cannot contradict each other.
+const downTheRunway = { ...NOMINAL, windKt: 25, windDirDeg: NOMINAL.runwayHeadingDeg } // straight on the nose
+const acrossIt = { ...NOMINAL, windKt: 25, windDirDeg: (NOMINAL.runwayHeadingDeg + 90) % 360 }
+const fromBehind = { ...NOMINAL, windKt: 25, windDirDeg: (NOMINAL.runwayHeadingDeg + 180) % 360 }
+assert.ok(Math.abs(simulate(downTheRunway, TIRE).headwindKt - 25) < 0.01, 'wind down the runway is all headwind')
+assert.ok(Math.abs(simulate(downTheRunway, TIRE).crosswindKt) < 0.01, '...and no crosswind at all')
+assert.ok(Math.abs(simulate(acrossIt, TIRE).crosswindKt - 25) < 0.01, 'wind across the runway is all crosswind')
+assert.ok(Math.abs(simulate(acrossIt, TIRE).headwindKt) < 0.01, '...and no headwind at all')
+
+// A headwind is the cheapest runway there is: it comes straight off the groundspeed, and every energy
+// term goes with the square of that.
+const head = simulate(downTheRunway, TIRE)
+const tail = simulate(fromBehind, TIRE)
+const still = simulate({ ...NOMINAL, windKt: 0 }, TIRE)
+assert.ok(Math.abs(head.gsTrueKt - (still.gsTrueKt - 25)) < 0.5, `25 kt on the nose must take 25 kt off the groundspeed: ${head.gsTrueKt.toFixed(0)} vs ${still.gsTrueKt.toFixed(0)} kt`)
+assert.ok(head.stopDistM < still.stopDistM - 150, `a 25 kt headwind should buy real runway: ${(still.stopDistM - head.stopDistM).toFixed(0)} m`)
+assert.ok(head.brakeEnergyMJ < still.brakeEnergyMJ, 'and cost the brakes less energy')
+assert.ok(head.scrubMm < still.scrubMm, 'and less rubber')
+// And a tailwind is the same coin the other way up — which the old model could not express either.
+assert.ok(tail.gsTrueKt > still.gsTrueKt + 20, `a tailwind lands you faster over the ground: ${tail.gsTrueKt.toFixed(0)} vs ${still.gsTrueKt.toFixed(0)} kt`)
+assert.ok(tail.stopDistM > still.stopDistM + 150, 'and costs runway for it')
 
 // The overrun case is the one worth being able to reach: fast, contaminated, a mile up, and the
 // shortest runway in the set (Tan Son Nhat). Every one of those is needed — this is the point.

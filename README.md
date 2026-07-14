@@ -1,4 +1,27 @@
-# TreadCast — Aircraft Tire RUL & Wear-Forecasting POC
+# Aerotrace Tire Intelligence
+
+<div align="center">
+
+![Aviation Track Winner](https://img.shields.io/badge/🏆_Aviation_Track_Winner-C9A227?style=for-the-badge)
+[![YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=dySqvJZkLSc)
+
+<br />
+
+![Tire inspection](assets/tire.gif)
+
+</div>
+
+---
+
+<div align="center">
+
+**Team: SpartansE-V**
+
+Bạch Doãn Vương · Tú Nguyễn (Thompson)· Trí Đoàn (TeeA)· Trọng Trần (Alex) · Thu Hoài (Yinn) · Nhân Nguyễn
+
+![SpartansE-V — Aviation Track Winner, Agentic AI Build Week](assets/team.jpg)
+
+</div>
 
 **Turns (synthetic) historical tire-inspection records into landings-based Remaining Useful
 Life (RUL) forecasts, wear-to-limit dates with confidence bands, a prioritized wheel worklist,
@@ -169,3 +192,7 @@ The `scoring.py` module is a deliberate seam — and it is now lifted behind Fas
 `app/services/tire_rul_service.py` serves the same pure functions at `POST /api/v1/tire_rul/predict`. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the 10-minute
 [docs/demo_script.md](docs/demo_script.md).
+
+## Agentic AI
+
+![Aerotrace Tire Intelligence](assets/landing.png)

@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { HUE } from './charts'
 import { FLEET_TIRES, statusOf } from './data'
 import type { Attitude, LandingFrame } from './landingEngine'
+import { useMock } from './mock'
 import { active, ENV, type Track } from './tracks'
 import type { Theme } from './ui'
 
@@ -14,6 +15,9 @@ import type { Theme } from './ui'
 // pivots. Nothing about the airframe is authored here; the only thing we add is the tire mapping.
 
 const STATUS_HUE = { ok: HUE.ok, watch: HUE.warn, action: HUE.crit }
+// A wheel with no telemetry behind it. The wheel is real; the verdict about it was invented, so with
+// mock off the pip goes grey rather than green — an unlit lamp, not a passing one.
+const NO_FEED_HUE = '#5f6f7d'
 const ZERO = new THREE.Vector3()
 
 export type CamPreset = 'field' | 'chase' | 'side' | 'gear'
@@ -113,6 +117,9 @@ export default function Aircraft({
   const [hover, setHover] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const mockAllowed = useMock()
+  const mockRef = useRef(mockAllowed)
+
   const api = useRef<{
     setAttitude: (a: Attitude) => void
     setFrame: (f: LandingFrame | undefined) => void
@@ -120,7 +127,14 @@ export default function Aircraft({
     setHover: (id: string | null) => void
     setCam: (p: CamPreset) => void
     setEnv: (t: Track, th: Theme) => void
+    repaint: () => void
   }>(null)
+
+  // The scene is built once and mutated through `api`, so a React re-render does not repaint the pips.
+  useEffect(() => {
+    mockRef.current = mockAllowed
+    api.current?.repaint()
+  }, [mockAllowed])
 
   useEffect(() => {
     const el = host.current!
@@ -267,7 +281,7 @@ export default function Aircraft({
       for (const w of wheels) {
         const pip = pips.get(w.id)
         if (!pip) continue
-        const c = STATUS_HUE[statusOf(FLEET_TIRES.find((t) => t.id === w.id)!)]
+        const c = mockRef.current ? STATUS_HUE[statusOf(FLEET_TIRES.find((t) => t.id === w.id)!)] : NO_FEED_HUE
         const mat = pip.material as THREE.MeshBasicMaterial
         mat.color.set(c)
         mat.opacity = w.id === sel ? 1 : w.id === hov ? 0.95 : 0.75
@@ -551,6 +565,7 @@ export default function Aircraft({
         paint(id, null)
       },
       setHover: (id) => paint(selectedRef.current, id),
+      repaint: () => paint(selectedRef.current, null),
       setCam: (p) => {
         camRef.current = p
         moveCam(p)
@@ -620,7 +635,7 @@ export default function Aircraft({
       <div className="absolute inset-x-0 bottom-0 flex flex-wrap justify-center gap-1 bg-gradient-to-t from-[var(--bg)] to-transparent p-2">
         {FLEET_TIRES.map((t) => {
           const on = t.id === selected
-          const c = STATUS_HUE[statusOf(t)]
+          const c = mockAllowed ? STATUS_HUE[statusOf(t)] : NO_FEED_HUE
           return (
             <button
               key={t.id}
@@ -628,7 +643,7 @@ export default function Aircraft({
               onMouseEnter={() => setHover(t.id)}
               onMouseLeave={() => setHover(null)}
               aria-pressed={on}
-              title={`${t.label} · ${t.psi} psi`}
+              title={mockAllowed ? `${t.label} · ${t.psi} psi` : `${t.label} · no feed`}
               className="border px-1.5 py-1 text-[10px] tabular-nums tracking-widest transition-colors"
               style={{ borderColor: on ? 'var(--ink)' : c, color: on ? 'var(--ink)' : c, background: on ? `${c}33` : 'transparent' }}
             >

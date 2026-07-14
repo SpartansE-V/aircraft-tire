@@ -27,7 +27,7 @@ implementation:
     - services/tire_assessor.py
     - services/tire_simulator.py
     - services/wear_calculator.py
-  sha256: f37354fa95bc57ad2fbccd16bb68b64c4f476db7be70ac9830817a12f37c68cc
+  sha256: 03baee298dba473674fe8ffd1d2d0bcdc0f50075a56d4d6d49b7087238846681
 supporting_evidence:
   - evidence_id: nasa-tp-3626-ittv-table4
     path: evidence/nasa-tp-3626-ittv-table4.json

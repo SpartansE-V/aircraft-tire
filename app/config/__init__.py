@@ -5,10 +5,31 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+REPO_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+LOCAL_CORS_ORIGINS = ",".join(
+    (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    )
+)
+
+# The AI backends use their SDKs' standard environment-variable configuration. Load the
+# application development file before the application imports those backends; existing
+# deployment environment variables retain precedence. Repo-root .env then app/.env.
+load_dotenv(REPO_ENV_PATH)
+load_dotenv(ENV_PATH, override=True)
 
 
 class RoboflowModelSettings(BaseModel):
@@ -38,15 +59,19 @@ class Settings(BaseSettings):
     """Runtime settings loaded from config.yaml, environment variables, or a local .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_PATH,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
         env_nested_delimiter="__",
     )
 
-    cors_origins: str = Field(default="http://localhost:3000", alias="CORS_ORIGINS")
+    cors_origins: str = Field(default=LOCAL_CORS_ORIGINS, alias="CORS_ORIGINS")
     port: int = Field(default=8000, ge=1, le=65535, alias="PORT")
+    # Bake mock-tyre scan packs into tires.parquet when the API process starts
+    # (same job as `python -m app.tire_rul.enrich_tire_assets`). Disable in tests.
+    enrich_on_startup: bool = Field(default=True, alias="ENRICH_ON_STARTUP")
+    enrich_seed: int = Field(default=20260712, ge=0, alias="ENRICH_SEED")
     roboflow: RoboflowSettings = Field(default_factory=RoboflowSettings)
 
     @field_validator("cors_origins")

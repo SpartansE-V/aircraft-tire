@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { HUE } from './charts'
 import { AIRCRAFT, type Status } from './data'
+import { setMock, useMock } from './mock'
 
 export type Theme = 'dark' | 'light'
 
@@ -47,6 +48,7 @@ const TABS = [
   { path: '/tyres', label: 'Tyres' },
   { path: '/rul', label: 'Tire Remaining Useful Life Prediction' },
   { path: '/simulate-landing', label: 'Simulate landing' },
+  { path: '/engineer-chat', label: 'Engineer Chat' },
 ]
 
 export function Header({
@@ -54,11 +56,14 @@ export function Header({
   theme,
   onTheme,
   path,
+  mockStatus,
 }: {
   status: Status
   theme: Theme
   onTheme: (t: Theme) => void
   path: string
+  /** The status is derived from mock telemetry, so it goes away with it. The RUL screen's is real. */
+  mockStatus?: boolean
 }) {
   const s = STATUS[status]
   return (
@@ -96,6 +101,7 @@ export function Header({
       </div>
       <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest">
         <span className="text-[var(--ink-3)]">{AIRCRAFT.phase}</span>
+        <MockSwitch />
         <button
           onClick={() => onTheme(theme === 'dark' ? 'light' : 'dark')}
           aria-pressed={theme === 'light'}
@@ -103,22 +109,98 @@ export function Header({
         >
           {theme === 'dark' ? '☾ Dark' : '☀ Light'}
         </button>
-        <span className="flex items-center gap-1.5 border px-2 py-1" style={{ borderColor: s.ink, color: s.ink }}>
-          {s.glyph} {s.text}
-        </span>
+        {mockStatus ? (
+          <Mock>
+            <span className="flex items-center gap-1.5 border px-2 py-1" style={{ borderColor: s.ink, color: s.ink }}>
+              {s.glyph} {s.text}
+            </span>
+          </Mock>
+        ) : (
+          <span className="flex items-center gap-1.5 border px-2 py-1" style={{ borderColor: s.ink, color: s.ink }}>
+            {s.glyph} {s.text}
+          </span>
+        )}
       </div>
     </header>
   )
 }
 
-export function Card({ title, tag, children, className = '' }: { title: string; tag: string; children: ReactNode; className?: string }) {
+/**
+ * `mock` means every number in this card is invented (see src/mock.ts). Such a card wears a MOCK chip
+ * while mock data is allowed, and leaves the page entirely when it is not — it has nothing to show.
+ */
+export function Card({
+  title,
+  tag,
+  mock,
+  children,
+  className = '',
+}: {
+  title: string
+  tag: string
+  mock?: boolean
+  children: ReactNode
+  className?: string
+}) {
+  const mockAllowed = useMock()
+  if (mock && !mockAllowed) return null
   return (
     <section className={`flex flex-col border border-[var(--line)] bg-[var(--panel)]/80 p-3 ${className}`}>
       <div className="mb-2 flex items-baseline justify-between gap-2">
         <h2 className="text-xs uppercase tracking-[0.2em] text-[var(--ink)]">{title}</h2>
-        <span className="text-[9px] uppercase tracking-widest text-[var(--ink-4)]">{tag}</span>
+        <span className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest text-[var(--ink-4)]">
+          {mock && <MockChip />}
+          {tag}
+        </span>
       </div>
       <div className="flex flex-1 flex-col justify-between">{children}</div>
+    </section>
+  )
+}
+
+/** Switch the invented telemetry off and see what this app is actually connected to. */
+function MockSwitch() {
+  const on = useMock()
+  return (
+    <button
+      onClick={() => setMock(!on)}
+      aria-pressed={on}
+      title={on ? 'Hide every panel fed by mock telemetry' : 'Show mock telemetry again'}
+      className="flex items-center gap-1.5 border px-2 py-1 uppercase tracking-widest transition-colors"
+      style={{
+        borderColor: on ? 'var(--warn-line)' : 'var(--line-2)',
+        color: on ? 'var(--warn)' : 'var(--ink-4)',
+      }}
+    >
+      {on ? '⌗ Mock on' : '⌗ Mock off'}
+    </button>
+  )
+}
+
+/** The mark. One shape, used everywhere a number is invented, so it reads as one fact and not as decor. */
+export function MockChip() {
+  return (
+    <span
+      title="Every number here is mock telemetry — no real feed is connected"
+      className="border px-1 py-px text-[8px] tracking-widest"
+      style={{ borderColor: 'var(--warn-line)', color: 'var(--warn)' }}
+    >
+      MOCK
+    </span>
+  )
+}
+
+/** Wraps mock-fed markup that is not a Card. Gone when mock telemetry is switched off. */
+export function Mock({ children }: { children: ReactNode }) {
+  return useMock() ? <>{children}</> : null
+}
+
+/** Says what is missing, rather than leaving a hole the eye reads as "fine". */
+export function NoFeed({ what, children }: { what: string; children?: ReactNode }) {
+  return (
+    <section className="flex flex-col items-start border border-dashed border-[var(--line-2)] p-4">
+      <h2 className="text-xs uppercase tracking-[0.2em] text-[var(--ink-3)]">{what}</h2>
+      <p className="mt-2 max-w-prose text-[11px] leading-relaxed text-[var(--ink-4)]">{children}</p>
     </section>
   )
 }

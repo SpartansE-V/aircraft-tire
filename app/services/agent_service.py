@@ -25,6 +25,7 @@ from app.domain.schemas import (
     AgentChatResponse,
     AgentToolCall,
     FleetWorklistResponse,
+    InspectionReading,
     PriorityWheel,
     WheelStatusResponse,
 )
@@ -193,23 +194,31 @@ class AgentService:
             & (tires["position_code"] == risk.position_code)
         ]
         tire_id = mounted.iloc[0]["tire_id"]
-        tire_features = ctx.feats[ctx.feats["tire_id"] == tire_id].sort_values(
-            "cycles_since_install"
-        )
-        readings = [
-            {
-                "cycles_since_install": float(row.cycles_since_install),
-                "measured_groove_mm": float(row.measured_groove_mm),
-            }
-            for row in tire_features.itertuples()
-        ]
-        landed_cycles = current_cycles_map(ctx.tables, ctx.as_of)
-        current_cycles = float(
-            landed_cycles.get(
-                tire_id,
-                tire_features["cycles_since_install"].max() if not tire_features.empty else 0.0,
+        # Inspection history and landed-cycle count come from the feature frame and the
+        # operational-cycles table. Both are optional on a minimal snapshot (a degraded deploy
+        # without the model prior, or a hand-built context), so fall back to an empty history
+        # there — mirroring how the agent's tools degrade when `feats`/`prior` are absent.
+        readings: list[InspectionReading] = []
+        newest_reading_cycles = 0.0
+        if ctx.feats is not None:
+            tire_features = ctx.feats[ctx.feats["tire_id"] == tire_id].sort_values(
+                "cycles_since_install"
             )
-        )
+            readings = [
+                InspectionReading(
+                    cycles_since_install=float(row.cycles_since_install),
+                    measured_groove_mm=float(row.measured_groove_mm),
+                )
+                for row in tire_features.itertuples()
+            ]
+            if not tire_features.empty:
+                newest_reading_cycles = float(tire_features["cycles_since_install"].max())
+        if ctx.tables.get("operational_cycles") is not None:
+            current_cycles = float(
+                current_cycles_map(ctx.tables, ctx.as_of).get(tire_id, newest_reading_cycles)
+            )
+        else:
+            current_cycles = newest_reading_cycles
         return WheelStatusResponse(
             tail_number=risk.tail_number,
             position=risk.position_code,

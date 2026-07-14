@@ -1,16 +1,23 @@
 """Remaining-useful-life (RUL) prediction and maintenance-agent endpoints."""
 
+import threading
 from typing import Any
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
+from pydantic import Field
 
 from app.api.errors import ErrorBody, ErrorResponse
 from app.domain.schemas import (
     MAX_WORKLIST_TOP_N,
     AgentChatRequest,
     AgentChatResponse,
+    CircleAnalysisRequest,
+    CircleAnalysisResponse,
+    FleetAircraftListResponse,
+    FleetTiresResponse,
     FleetWorklistResponse,
+    StrictSchema,
     TireRulPredictionRequest,
     TireRulPredictionResponse,
     WheelStatusResponse,
@@ -20,10 +27,15 @@ from app.services.agent_service import (
     AgentDataUnavailableError,
     agent_service,
 )
+from app.services.circle_analysis_service import CircleAnalysisError, analyze_circle
+from app.services.fleet_tires_service import fleet_tires_service
 from app.services.tire_rul_service import tire_rul_service
 
 # RUL stands for Remaining Useful Life
 router = APIRouter(prefix="/api/v1/tire_rul", tags=["Tire Remaining Useful Life Prediction"])
+
+_ENRICH_LOCK = threading.Lock()
+_DEFAULT_ENRICH_SEED = 20260712
 
 _FLEET_UNAVAILABLE: dict[int | str, dict[str, Any]] = {
     503: {
@@ -31,6 +43,24 @@ _FLEET_UNAVAILABLE: dict[int | str, dict[str, Any]] = {
         "description": "The fleet dataset/AI stack is not available on this deployment.",
     }
 }
+
+
+class EnrichTireAssetsResponse(StrictSchema):
+    """Summary after rewriting tires.parquet scan packs."""
+
+    seed: int
+    current_tires: int = Field(ge=0)
+    status_counts: dict[str, int]
+    model_counts: dict[str, int]
+    group_counts: dict[str, int]
+
+
+def enrich_tires(*, seed: int) -> Any:
+    """Load the pandas-backed enrichment job only when its endpoint is called."""
+
+    from app.tire_rul.enrich_tire_assets import enrich_tires as run_enrichment
+
+    return run_enrichment(seed=seed)
 
 
 def _fleet_unavailable_response(exc: AgentDataUnavailableError) -> JSONResponse:
@@ -144,3 +174,143 @@ def wheel_status(
         )
         return JSONResponse(status_code=404, content=payload.model_dump(exclude_none=True))
     return status
+
+
+@router.post(
+    "/analyze-circle",
+    response_model=CircleAnalysisResponse,
+    summary="Analyze circle scan + crack overlays with a VLM",
+    description=(
+        "Loads the circle image, composites the provided 2D crack annotations, and asks a "
+        "vision LLM for a short technical condition report (overall status, per-crack "
+        "findings, recommended action). Uses OpenAI when OPENAI_API_KEY is set; otherwise mock."
+    ),
+    responses={
+        400: {"model": ErrorResponse, "description": "Image not found or malformed request."},
+        422: {"model": ErrorResponse, "description": "One or more inputs are invalid."},
+        502: {"model": ErrorResponse, "description": "VLM backend failed."},
+    },
+)
+def analyze_circle_scan(request: CircleAnalysisRequest) -> CircleAnalysisResponse | JSONResponse:
+    try:
+        return analyze_circle(request)
+    except CircleAnalysisError as exc:
+        message = str(exc)
+        code = "CIRCLE_ANALYSIS_FAILED"
+        status = 502 if "OPENAI" in message or "SDK" in message else 400
+        if "not found" in message.lower():
+            code = "CIRCLE_IMAGE_NOT_FOUND"
+        payload = ErrorResponse(error=ErrorBody(code=code, message=message))
+        return JSONResponse(status_code=status, content=payload.model_dump(exclude_none=True))
+
+
+@router.get(
+    "/fleet/aircraft",
+    response_model=FleetAircraftListResponse,
+    summary="List fleet aircraft tails",
+    description="Aircraft available for the /tyres dashboard (from aircraft.parquet).",
+    responses=_FLEET_UNAVAILABLE,
+)
+def fleet_aircraft() -> FleetAircraftListResponse | JSONResponse:
+    try:
+        return fleet_tires_service.list_aircraft()
+    except AgentDataUnavailableError as exc:
+        return _fleet_unavailable_response(exc)
+
+
+@router.get(
+    "/fleet/tires",
+    response_model=FleetTiresResponse,
+    summary="Current tires for one aircraft (scan status + 3D defects)",
+    description=(
+        "Currently-mounted tires for a tail: construction model_type, scan_status "
+        "(healthy / warning / error from crack & tread-shallow annotations), linked "
+        "mock-tyre frame images, and 3D defect overlays for the /tyres viewer."
+    ),
+    responses={
+        404: {"model": ErrorResponse, "description": "Unknown tail number."},
+        **_FLEET_UNAVAILABLE,
+    },
+)
+def fleet_tires(
+    tail: str = Query(max_length=16, description="Aircraft tail number, e.g. VN-A300"),
+) -> FleetTiresResponse | JSONResponse:
+    try:
+        payload = fleet_tires_service.tires_for_tail(tail)
+    except AgentDataUnavailableError as exc:
+        return _fleet_unavailable_response(exc)
+    if payload is None:
+        body = ErrorResponse(
+            error=ErrorBody(code="AIRCRAFT_NOT_FOUND", message=f"No aircraft with tail '{tail}'.")
+        )
+        return JSONResponse(status_code=404, content=body.model_dump(exclude_none=True))
+    return payload
+
+
+@router.post(
+    "/fleet/enrich-scans",
+    response_model=EnrichTireAssetsResponse,
+    summary="Re-enrich fleet tires with mock-tyre scan packs",
+    description=(
+        "Runs the same job as `python -m app.tire_rul.enrich_tire_assets`: assigns scan "
+        "groups, tread-depth bands, construction types, and 3D crack overlays onto "
+        "tires.parquet. Deterministic for a fixed seed. Concurrent runs are rejected."
+    ),
+    responses={
+        409: {
+            "model": ErrorResponse,
+            "description": "An enrich job is already running.",
+        },
+        **_FLEET_UNAVAILABLE,
+    },
+)
+def enrich_fleet_scans(
+    seed: int = Query(
+        default=_DEFAULT_ENRICH_SEED,
+        ge=0,
+        description="RNG seed for deterministic scan/status assignment.",
+    ),
+) -> EnrichTireAssetsResponse | JSONResponse:
+    if not _ENRICH_LOCK.acquire(blocking=False):
+        payload = ErrorResponse(
+            error=ErrorBody(
+                code="ENRICH_IN_PROGRESS",
+                message="An enrich-scans job is already running.",
+            )
+        )
+        return JSONResponse(status_code=409, content=payload.model_dump(exclude_none=True))
+
+    try:
+        try:
+            tires = enrich_tires(seed=seed)
+        except ImportError:
+            return _fleet_unavailable_response(
+                AgentDataUnavailableError(
+                    "Enriching tire scan packs needs the AI stack (`uv sync --extra ai`)."
+                )
+            )
+        except FileNotFoundError as exc:
+            detail = str(exc).strip() or (
+                "Fleet dataset or mock-tyre assets not found; "
+                "run `make data` locally or bake assets/mock-tyres/release into the image."
+            )
+            return _fleet_unavailable_response(AgentDataUnavailableError(detail))
+        except AgentDataUnavailableError as exc:
+            return _fleet_unavailable_response(exc)
+
+        current = tires[tires["is_current"].fillna(False).astype(bool)]
+        return EnrichTireAssetsResponse(
+            seed=seed,
+            current_tires=int(len(current)),
+            status_counts={
+                str(k): int(v) for k, v in current["scan_status"].value_counts().items()
+            },
+            model_counts={
+                str(k): int(v) for k, v in current["model_type"].value_counts().items()
+            },
+            group_counts={
+                str(k): int(v) for k, v in current["scan_group"].value_counts().items()
+            },
+        )
+    finally:
+        _ENRICH_LOCK.release()

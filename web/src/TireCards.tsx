@@ -10,12 +10,18 @@ const avg = (xs: number[]) => Math.round(xs.reduce((a, b) => a + b, 0) / xs.leng
 
 export function IdentityCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Identity" tag="OCR · 3D laser">
+    <Card title="Identity" mock tag="OCR · 3D laser">
       <div className="space-y-2">
         <Field k="Serial (molded)" v={tire.serial} mono />
         <Field k="OCR confidence" v={`${(tire.ocrConfidence * 100).toFixed(0)} %`} warn={tire.ocrConfidence < 0.85} />
         <Field k="Retread stamps" v={`R${tire.retreads} / 3 max`} warn={tire.retreads >= 3} />
         <Field k="Part / size" v={`${tire.partNo} · ${tire.size}`} />
+        <Field k="Model type" v={tire.modelType.replaceAll('_', ' ').toUpperCase()} />
+        <Field
+          k="Scan status"
+          v={tire.scanStatus.toUpperCase()}
+          warn={tire.scanStatus !== 'healthy'}
+        />
         <Field k="Flight-log join" v={tire.joinKey.toUpperCase()} warn={tire.joinKey === 'inferred'} />
       </div>
       <Open>Black rubber and vulcanization hairs cap OCR confidence — the serial is the only true key</Open>
@@ -26,7 +32,7 @@ export function IdentityCard({ tire }: { tire: Tire }) {
 export function PressureCard({ tire }: { tire: Tire }) {
   const psiDev = ((tire.psi - tire.psiTarget) / tire.psiTarget) * 100
   return (
-    <Card title="Tire pressure" tag="TPMS · ACARS">
+    <Card title="Tire pressure" mock tag="TPMS · ACARS">
       <Gauge
         value={tire.psi}
         min={Math.round(tire.psiTarget * 0.8)}
@@ -49,7 +55,7 @@ export function PressureCard({ tire }: { tire: Tire }) {
 
 export function TouchdownCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Touchdown / braking" tag="FOQA · per-flight rollup">
+    <Card title="Touchdown / braking" mock tag="FOQA · per-flight rollup">
       <div className="mb-1 flex justify-between text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
         <span>Peak vertical G · last 10</span>
         <span style={{ color: 'var(--crit)' }}>▲ &gt; 1.8 G</span>
@@ -72,7 +78,7 @@ export function TouchdownCard({ tire }: { tire: Tire }) {
 
 export function TaxiCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Taxi / steering" tag="FDR · ADS-B">
+    <Card title="Taxi / steering" mock tag="FDR · ADS-B">
       <div className="mb-3 grid grid-cols-3 gap-2">
         <Mini label="Taxi dist" value={`${tire.taxiKm} km`} />
         <Mini label="Avg gnd spd" value={`${tire.taxiAvgKt} kt`} />
@@ -95,7 +101,7 @@ export function TaxiCard({ tire }: { tire: Tire }) {
 
 export function WeatherCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Weights / environment" tag="ACARS · METAR">
+    <Card title="Weights / environment" mock tag="ACARS · METAR">
       <div className="grid grid-cols-2 gap-2">
         <Mini label="Payload" value={`${tire.payloadT} t`} />
         <Mini label="OAT" value={`${tire.oatC} °C`} bad={tire.oatC > 35} />
@@ -112,7 +118,7 @@ export function WeatherCard({ tire }: { tire: Tire }) {
 
 export function UtilizationCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Utilization" tag="OOOI · MRO">
+    <Card title="Utilization" mock tag="OOOI · MRO">
       <div className="grid grid-cols-2 gap-2">
         <Mini label="Cycles" value={`${tire.cycles}`} />
         <Mini label="Flight hrs" value={`${tire.flightHrs}`} />
@@ -133,7 +139,7 @@ export function UtilizationCard({ tire }: { tire: Tire }) {
 
 export function EventsCard({ tire }: { tire: Tire }) {
   return (
-    <Card title="Route profile · high-wear events" tag="Flight ops log">
+    <Card title="Route profile · high-wear events" mock tag="Flight ops log">
       {tire.events.length === 0 ? (
         <p className="py-6 text-center text-xs text-[var(--ink-4)]">No flagged events in window</p>
       ) : (
@@ -157,38 +163,84 @@ export function EventsCard({ tire }: { tire: Tire }) {
 }
 
 export function TreadCard({ tire }: { tire: Tire }) {
+  const bands = tire.treadDepths
   return (
-    <Card title="Tread depth" tag="Laser triangulation">
-      <RowBars unit=" mm" max={10} limit={tire.grooveLimit} rows={tire.grooves.map((g, i) => ({ label: `Groove ${i + 1}`, value: g }))} />
+    <Card title="Tread depth" tag={`${tire.modelType} · ${bands?.length ?? tire.grooves.length} grooves`}>
+      {bands?.length ? (
+        <div className="space-y-1.5">
+          {bands.map((band, i) => {
+            const worn = band === '1-2mm' || band === '2-3mm'
+            const shallow = band === '3-4mm'
+            return (
+              <div key={`${band}-${i}`} className="flex items-center justify-between border border-[var(--line)] px-2 py-1.5">
+                <span className="text-[10px] uppercase tracking-widest text-[var(--ink-3)]">Groove {i + 1}</span>
+                <span
+                  className="text-xs tabular-nums"
+                  style={{ color: worn ? 'var(--crit)' : shallow ? 'var(--warn)' : 'var(--ink)' }}
+                >
+                  {band}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <RowBars unit=" mm" max={10} limit={tire.grooveLimit} rows={tire.grooves.map((g, i) => ({ label: `Groove ${i + 1}`, value: g }))} />
+      )}
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Mini label="Scan error" value={`± ${tire.scanErrorMm} mm`} bad={tire.scanErrorMm > 0.2} />
         <Mini label="Calibrated" value={`${tire.calibratedDaysAgo} d ago`} bad={tire.calibratedDaysAgo > 30} />
       </div>
-      <Open>Absolute error has to hold under 0.20 mm — above that the wear curve decides removal, not the tire</Open>
+      <Open>Bands: healthy 4–6 mm · warning 3–4 mm · error 1–3 mm (or any crack)</Open>
     </Card>
   )
 }
 
-export function DefectsCard({ tire }: { tire: Tire }) {
+export function DefectsCard({
+  tire,
+  selectedLabel = null,
+  onSelect,
+}: {
+  tire: Tire
+  selectedLabel?: string | null
+  onSelect?: (label: string | null) => void
+}) {
   return (
-    <Card title="Defects" tag="Vision model">
+    <Card title="Defects" mock tag="Vision model">
       {tire.defects.length === 0 ? (
         <p className="py-6 text-center text-xs text-[var(--ink-4)]">Clean — no wear or damage flags</p>
       ) : (
         <ul className="space-y-2">
-          {tire.defects.map((d) => (
-            <li key={d.label} className="flex items-start gap-2 border border-[var(--line)] bg-[var(--panel)] p-2">
-              <span className="mt-0.5 text-xs" style={{ color: d.kind === 'damage' ? 'var(--crit)' : 'var(--warn)' }}>
-                {d.kind === 'damage' ? '⚠' : '≈'}
-              </span>
-              <div className="min-w-0">
-                <div className="text-xs text-[var(--ink)]">{d.label}</div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
-                  {d.zone} · {d.kind === 'damage' ? 'REMOVE — AOG kit' : 'MONITOR — next check'}
+          {tire.defects.map((d) => {
+            const on = selectedLabel === d.label
+            const dim = selectedLabel != null && !on
+            return (
+              <li
+                key={d.label}
+                className={`flex items-start gap-2 border p-2 transition-colors ${
+                  onSelect ? 'cursor-pointer' : ''
+                } ${on ? 'border-[#22d3ee] bg-[#22d3ee22]' : 'border-[var(--line)] bg-[var(--panel)]'} ${
+                  dim ? 'opacity-40' : ''
+                }`}
+                onClick={() => onSelect?.(on ? null : d.label)}
+              >
+                <span
+                  className="mt-0.5 text-xs"
+                  style={{ color: on ? '#22d3ee' : d.kind === 'damage' ? 'var(--crit)' : 'var(--warn)' }}
+                >
+                  {d.kind === 'damage' ? '⚠' : '≈'}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs text-[var(--ink)]">{d.label}</div>
+                  <div className="mt-0.5 text-[10px] uppercase tracking-widest text-[var(--ink-3)]">
+                    {d.zone}
+                    {d.source ? ` · ${d.source}` : ''} ·{' '}
+                    {d.kind === 'damage' ? 'REMOVE — AOG kit' : 'MONITOR — next check'}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            )
+          })}
         </ul>
       )}
       <Open>Wear and acute damage take different logistics paths — one schedules a swap, the other grounds the aircraft</Open>
